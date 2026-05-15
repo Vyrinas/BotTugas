@@ -70,7 +70,7 @@ taskForm.addEventListener('submit', async (e) => {
 function getTimeRemaining(dateStr) {
     if (!dateStr) return { class: 'warning', text: 'Belum ditentukan', raw: null };
     const now = new Date();
-    const deadline = new Date(dateStr);
+    const deadline = new Date(dateStr + '+08:00');
     const diffMs = deadline - now;
     
     if (diffMs < 0) {
@@ -108,7 +108,7 @@ function renderTasks() {
             let dateFmt = 'Belum ada batas waktu';
             const targetDateStr = task.date || task.deadline;
             if (targetDateStr && targetDateStr.trim() !== '') {
-                const dateObj = new Date(targetDateStr);
+                const dateObj = new Date(targetDateStr + '+08:00');
                 if (!isNaN(dateObj.getTime())) {
                     const hasTime = targetDateStr.includes('T') || targetDateStr.includes(':');
                     const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
