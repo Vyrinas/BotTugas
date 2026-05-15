@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "web.js"
+    },
+    {
+      "source": "/health",
+      "destination": "web.js"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "public/$1"
+    }
+  ]
+}

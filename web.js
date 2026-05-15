@@ -87,6 +87,10 @@ app.delete('/api/tasks/:id', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`🌐 Web Dashboard aktif di port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production' || require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`🌐 Web Dashboard aktif di port ${PORT}`);
+    });
+}
+
+module.exports = app;
