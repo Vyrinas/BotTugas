@@ -1,0 +1,6 @@
+node_modules
+.env
+.git
+auth_session
+tasks.json
+settings.json

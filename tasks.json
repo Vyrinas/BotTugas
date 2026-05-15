@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Pak Emil - Tugas",
+    "detail": "Tugas studi kasus dan upload di classroom (belum ada link)",
+    "deadline": "",
+    "status": "pending"
+  },
+  {
+    "name": "Ibu Chyquita - Tugas",
+    "detail": "Tugas Web",
+    "deadline": "2026-05-31",
+    "status": "pending"
+  },
+  {
+    "name": "Ibu Angky - Tugas",
+    "detail": "TOEFL",
+    "deadline": "2026-05-15T22:00",
+    "status": "pending"
+  },
+  {
+    "name": "Ibu Darniati - Tugas",
+    "detail": "Buat project Python atau Java disertai laporan dalam format PPT (Kelas f sih gitu)",
+    "deadline": "",
+    "status": "pending"
+  }
+]
