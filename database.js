@@ -15,6 +15,14 @@ const connectDB = async () => {
         isConnected = true;
         console.log('✅ Berhasil terhubung ke MongoDB Atlas!');
 
+        // Hapus index lama 'key' jika ada, karena sering bentrok saat banyak grup
+        try {
+            await mongoose.connection.db.collection('settings').dropIndex('key_1');
+            console.log('🧹 Index usang (key_1) berhasil dihapus dari database');
+        } catch (e) {
+            // Index mungkin sudah tidak ada, abaikan saja
+        }
+
         mongoose.connection.on('disconnected', () => {
             isConnected = false;
             console.log('⚠️ MongoDB terputus.');
