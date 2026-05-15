@@ -54,7 +54,7 @@ app.get('/api/tasks', async (req, res) => {
 });
 
 app.post('/api/tasks', async (req, res) => {
-    const { name, date, detail, priority } = req.body;
+    const { name, date, detail, priority, silent } = req.body;
     if (!name) return res.status(400).json({ error: 'Nama tugas wajib diisi' });
 
     try {
@@ -63,7 +63,8 @@ app.post('/api/tasks', async (req, res) => {
             deadline: date || '',
             detail: detail || '',
             status: 'pending',
-            priority: priority || 'normal'
+            priority: priority || 'normal',
+            silent: silent || false
         });
         res.status(201).json({ message: 'Tugas ditambahkan', task });
     } catch (error) {

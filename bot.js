@@ -351,8 +351,10 @@ function setupChangeStream() {
 
         if (change.operationType === 'insert') {
             const t = change.fullDocument;
-            const time = getTimeRemaining(t.deadline);
-            msg = `📥 *Tugas Baru Ditambahkan*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal')}`;
+            if (!t.silent) {
+                const time = getTimeRemaining(t.deadline);
+                msg = `📥 *Tugas Baru Ditambahkan*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal')}`;
+            }
         } else if (change.operationType === 'update' && change.fullDocument) {
             const t = change.fullDocument;
             if (t.status === 'completed') {

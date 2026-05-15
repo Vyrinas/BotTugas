@@ -40,7 +40,8 @@ const taskSchema = new mongoose.Schema({
     deadline: { type: String, default: '' },
     status: { type: String, default: 'pending' },
     priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
-    completedAt: { type: Date, default: null }
+    completedAt: { type: Date, default: null },
+    silent: { type: Boolean, default: false }
 }, { timestamps: true });
 
 const settingSchema = new mongoose.Schema({
