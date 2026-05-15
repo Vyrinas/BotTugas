@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { connectDB, Task } = require('../database');
+const { connectDB, Task } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,7 +18,7 @@ app.use(async (req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('<h1>BotTugas API Online</h1><p>Express is working! Jika Anda melihat ini, silakan cek apakah file statis di /public/index.html sudah benar.</p>');
+    res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
