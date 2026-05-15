@@ -181,6 +181,16 @@ async function startBot() {
                 globalSock = sock;
                 isReconnecting = false;
                 setupChangeStream();
+
+                // Langsung cek tugas kritis saat pertama kali terhubung
+                setTimeout(async () => {
+                    console.log('🔍 Cek awal tugas kritis setelah connect...');
+                    try {
+                        await broadcastReminder(sock, null, 'critical');
+                    } catch (e) {
+                        console.error('❌ Gagal cek awal:', e.message);
+                    }
+                }, 3000);
             }
         });
 
@@ -220,13 +230,14 @@ cron.schedule('0 8 * * *', async () => {
     }
 }, { timezone: "Asia/Makassar" });
 
-// Pengingat setiap jam: HANYA kirim yang deadline <= 3 jam atau terlewat
-cron.schedule('0 * * * *', async () => {
-    console.log('⏰ Cron per jam: mengecek tugas kritis (≤3 jam)...');
+// Pengingat setiap 15 MENIT: cek tugas kritis (deadline <= 3 jam atau terlewat)
+cron.schedule('*/15 * * * *', async () => {
+    const now = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar' });
+    console.log(`⏰ [${now}] Cron 15-menit: mengecek tugas kritis (≤3 jam)...`);
     if (globalSock) {
         await broadcastReminder(globalSock, null, 'critical');
     } else {
-        console.log('⚠️ Cron per jam: Bot belum terhubung, skip.');
+        console.log('⚠️ Cron 15-menit: Bot belum terhubung, skip.');
     }
 }, { timezone: "Asia/Makassar" });
 
