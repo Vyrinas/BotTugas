@@ -53,12 +53,12 @@
             <div class="tabs">
                 <button class="tab-btn active" data-target="pending">Belum Selesai</button>
                 <button class="tab-btn" data-target="completed">Selesai</button>
+                <button class="tab-btn" data-target="settings">Grup Terhubung</button>
             </div>
 
             <section class="task-list-section">
                 <div id="pending" class="tab-content active">
                     <ul id="task-list" class="task-list">
-                        <!-- Tasks will be injected here via JS -->
                         <div class="empty-state">
                             <i class="ri-loader-4-line spin"></i>
                             <p>Memuat tugas...</p>
@@ -67,8 +67,18 @@
                 </div>
 
                 <div id="completed" class="tab-content">
-                    <ul id="completed-list" class="task-list">
-                        <!-- Completed tasks injected here -->
+                    <ul id="completed-list" class="task-list"></ul>
+                </div>
+
+                <div id="settings" class="tab-content">
+                    <div class="settings-header">
+                        <p class="settings-hint"><i class="ri-information-line"></i> Daftar grup yang akan menerima notifikasi otomatis. Anda bisa menghapus grup dari sini tanpa harus mengetik perintah di WhatsApp.</p>
+                    </div>
+                    <ul id="group-list" class="task-list">
+                        <div class="empty-state">
+                            <i class="ri-loader-4-line spin"></i>
+                            <p>Memuat daftar grup...</p>
+                        </div>
                     </ul>
                 </div>
             </section>

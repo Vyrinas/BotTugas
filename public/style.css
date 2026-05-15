@@ -446,3 +446,22 @@ footer {
         padding-top: 12px;
     }
 }
+/* Settings Section */
+.settings-header {
+    margin-bottom: 20px;
+}
+
+.settings-hint {
+    background: rgba(99, 102, 241, 0.1);
+    border-left: 4px solid var(--primary);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #e2e8f0;
+    line-height: 1.5;
+}
+
+.settings-hint i {
+    color: var(--primary);
+    margin-right: 4px;
+}

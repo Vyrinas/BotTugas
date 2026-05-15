@@ -9,6 +9,7 @@ const taskList = document.getElementById('task-list');
 const completedList = document.getElementById('completed-list');
 const tabBtns = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
+const groupList = document.getElementById('group-list');
 
 // Modal Elements
 const editModal = document.getElementById('edit-modal');
@@ -24,7 +25,12 @@ tabBtns.forEach(btn => {
         tabContents.forEach(c => c.classList.remove('active'));
         
         btn.classList.add('active');
-        document.getElementById(btn.dataset.target).classList.add('active');
+        const target = btn.dataset.target;
+        document.getElementById(target).classList.add('active');
+        
+        if (target === 'settings') {
+            fetchGroups();
+        }
     });
 });
 
@@ -229,3 +235,51 @@ editForm.addEventListener('submit', async (e) => {
         console.error('Error:', error);
     }
 });
+
+// --- GROUP MANAGEMENT ---
+async function fetchGroups() {
+    try {
+        const response = await fetch('/api/settings');
+        const groups = await response.json();
+        renderGroups(groups);
+    } catch (error) {
+        console.error('Error fetching groups:', error);
+        groupList.innerHTML = `<div class="empty-state"><i class="ri-error-warning-line"></i><p>Gagal memuat daftar grup.</p></div>`;
+    }
+}
+
+function renderGroups(groups) {
+    if (groups.length === 0) {
+        groupList.innerHTML = `<div class="empty-state"><i class="ri-chat-delete-line"></i><p>Belum ada grup yang terhubung. Gunakan perintah <b>!setgrup</b> di WhatsApp.</p></div>`;
+        return;
+    }
+
+    groupList.innerHTML = groups.map(group => {
+        return `
+            <li class="task-item">
+                <div class="task-info">
+                    <span class="task-name">${group.reminderJid}</span>
+                    <div class="task-date">
+                        <i class="ri-checkbox-circle-line"></i> Status: Aktif
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button class="action-btn btn-delete" onclick="deleteGroup('${group._id}')" title="Hapus Grup">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+async function deleteGroup(id) {
+    if (confirm('Yakin ingin menghapus grup ini dari daftar pengingat? Grup ini tidak akan lagi menerima notifikasi otomatis.')) {
+        try {
+            await fetch(`/api/settings/${id}`, { method: 'DELETE' });
+            fetchGroups();
+        } catch (error) {
+            console.error('Error deleting group:', error);
+        }
+    }
+}

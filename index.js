@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { connectDB, Task } = require('./database');
+const { connectDB, Task, Setting } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,6 +89,25 @@ app.delete('/api/tasks/:id', async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ error: 'Gagal menghapus tugas' });
+    }
+});
+
+// --- API UNTUK MANAJEMEN GRUP ---
+app.get('/api/settings', async (req, res) => {
+    try {
+        const settings = await Setting.find();
+        res.json(settings);
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengambil data grup' });
+    }
+});
+
+app.delete('/api/settings/:id', async (req, res) => {
+    try {
+        await Setting.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Grup berhasil dihapus' });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal menghapus grup' });
     }
 });
 
