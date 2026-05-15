@@ -1,9 +1,6 @@
 process.env.TZ = 'Asia/Makassar';
 require('dotenv').config();
-const {
-    default: makeWASocket,
-    DisconnectReason
-} = require('baileys-joss');
+const { default: makeWASocket, DisconnectReason } = require('baileys-joss');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
@@ -11,34 +8,262 @@ const { connectDB, Task, Setting } = require('./database');
 const { useMongoDBAuthState } = require('./mongoAuthState');
 
 let globalSock = null;
-let activeChangeStream = null; // Mencegah change stream duplikat
-let isReconnecting = false;    // Mencegah reconnect bersamaan
+let activeChangeStream = null;
+let isReconnecting = false;
+const botStartTime = new Date();
 
-// --- Helper: Hitung Mundur ---
+// ═══════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════
+
 function getTimeRemaining(dateStr) {
-    if (!dateStr) return { text: 'Belum ditentukan', diffMs: null };
+    if (!dateStr) return { text: 'Belum ditentukan', diffMs: null, label: '⚪', level: 'none' };
     const now = new Date();
     const deadline = new Date(dateStr);
-    if (isNaN(deadline.getTime())) return { text: 'Belum ditentukan', diffMs: null };
-    
+    if (isNaN(deadline.getTime())) return { text: 'Belum ditentukan', diffMs: null, label: '⚪', level: 'none' };
+
     const diffMs = deadline - now;
     if (diffMs < 0) {
-        const overHours = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60));
-        return { text: `Terlewat ${overHours} jam`, diffMs };
+        const h = Math.floor(Math.abs(diffMs) / 3600000);
+        const d = Math.floor(h / 24);
+        return { text: d > 0 ? `Terlewat ${d} hari ${h % 24} jam` : `Terlewat ${h} jam`, diffMs, label: '⚫', level: 'missed' };
     }
+    const d = Math.floor(diffMs / 86400000);
+    const h = Math.floor(diffMs / 3600000) % 24;
+    const m = Math.floor(diffMs / 60000) % 60;
 
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(diffMs / (1000 * 60 * 60)) % 24;
-    const mins = Math.floor(diffMs / (1000 * 60)) % 60;
-
-    if (days > 0) return { text: `${days} hari ${hours} jam`, diffMs };
-    if (hours > 0) return { text: `${hours} jam ${mins} mnt`, diffMs };
-    return { text: `${mins} menit lagi!`, diffMs };
+    if (d > 2) return { text: `${d} hari ${h} jam`, diffMs, label: '🟢', level: 'safe' };
+    if (d > 0) return { text: `${d} hari ${h} jam`, diffMs, label: '🟡', level: 'warning' };
+    if (h > 3) return { text: `${h} jam ${m} mnt`, diffMs, label: '🟡', level: 'warning' };
+    if (h > 0) return { text: `${h} jam ${m} mnt`, diffMs, label: '🔴', level: 'critical' };
+    return { text: `${m} menit lagi!`, diffMs, label: '🔴', level: 'critical' };
 }
 
-// --- Logika Broadcast Pengingat ---
-// mode: 'all' = semua pengingat (untuk cron pagi & !list)
-//       'critical' = hanya deadline <= 3 jam & terlewat (untuk cron setiap jam)
+function formatDeadline(dateStr) {
+    if (!dateStr) return 'Belum ditentukan';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Belum ditentukan';
+    const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return d.toLocaleDateString('id-ID', opts) + ' WITA';
+}
+
+function priorityIcon(p) {
+    return p === 'high' ? '🔥' : p === 'low' ? '📎' : '📌';
+}
+
+function progressBar(done, total, len = 12) {
+    if (total === 0) return '░'.repeat(len) + ' 0%';
+    const pct = Math.round((done / total) * 100);
+    const filled = Math.round((done / total) * len);
+    return '█'.repeat(filled) + '░'.repeat(len - filled) + ` ${pct}%`;
+}
+
+// ═══════════════════════════════════════
+// COMMAND HANDLERS
+// ═══════════════════════════════════════
+
+async function cmdMenu(sock, jid) {
+    const msg = `╔══════════════════════════╗
+     📋 *REMINDME BOT*
+╚══════════════════════════╝
+
+📝 *Manajemen Tugas*
+├ !list — Daftar semua tugas
+├ !detail <no> — Detail tugas
+├ !tambah <nama> | <deadline> | <detail>
+├ !selesai <no> — Tandai selesai
+├ !hapus <no> — Hapus tugas
+└ !stats — Statistik tugas
+
+⚙️ *Pengaturan*
+├ !setgrup — Aktifkan pengingat
+├ !hapusgrup — Matikan pengingat
+└ !info — Info bot
+
+💡 *Contoh:*
+_!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_
+_!selesai 1_`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+async function cmdList(sock, jid) {
+    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    if (tasks.length === 0) {
+        await sock.sendMessage(jid, { text: '╔══════════════════════════╗\n     📋 *DAFTAR TUGAS*\n╚══════════════════════════╝\n\n✨ Tidak ada tugas aktif!\nGunakan *!tambah* untuk menambah tugas.' });
+        return;
+    }
+
+    const allTasks = await Task.find().sort({ createdAt: 1 });
+    const completed = allTasks.filter(t => t.status === 'completed').length;
+
+    let lines = [];
+    tasks.forEach((task, i) => {
+        const time = getTimeRemaining(task.deadline);
+        const pIcon = priorityIcon(task.priority);
+        let line = `${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}`;
+        if (task.deadline) line += `\n   📅 ${formatDeadline(task.deadline)}`;
+        if (task.detail) line += `\n   📝 _${task.detail}_`;
+        line += `\n   ${pIcon} ${(task.priority || 'normal').charAt(0).toUpperCase() + (task.priority || 'normal').slice(1)}`;
+        lines.push(line);
+    });
+
+    const bar = progressBar(completed, allTasks.length);
+    const msg = `╔══════════════════════════╗
+     📋 *DAFTAR TUGAS AKTIF*
+╚══════════════════════════╝
+
+${lines.join('\n\n')}
+
+──────────────────
+📊 Total: ${allTasks.length} | ✅ ${completed} | ⏳ ${tasks.length}
+[${bar}]`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+async function cmdDetail(sock, jid, args) {
+    const num = parseInt(args);
+    if (!num || num < 1) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!detail <nomor>*\nContoh: _!detail 1_' });
+        return;
+    }
+    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const task = tasks[num - 1];
+    if (!task) {
+        await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan. Ketik *!list* untuk melihat daftar.` });
+        return;
+    }
+    const time = getTimeRemaining(task.deadline);
+    const msg = `╔══════════════════════════╗
+     📄 *DETAIL TUGAS #${num}*
+╚══════════════════════════╝
+
+*Nama:* ${task.name}
+*Deadline:* ${formatDeadline(task.deadline)}
+*Sisa Waktu:* ${time.label} ${time.text}
+*Detail:* ${task.detail || '-'}
+*Prioritas:* ${priorityIcon(task.priority)} ${(task.priority || 'normal').charAt(0).toUpperCase() + (task.priority || 'normal').slice(1)}
+*Status:* ⏳ Pending
+*Dibuat:* ${formatDeadline(task.createdAt)}`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+async function cmdTambah(sock, jid, args) {
+    if (!args) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!tambah <nama> | <deadline> | <detail>*\n\n💡 Contoh:\n_!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_\n_!tambah Presentasi_\n_!tambah Essay | 2026-05-18_' });
+        return;
+    }
+    const parts = args.split('|').map(s => s.trim());
+    const name = parts[0];
+    const deadline = parts[1] || '';
+    const detail = parts[2] || '';
+
+    if (deadline && isNaN(new Date(deadline).getTime())) {
+        await sock.sendMessage(jid, { text: '❌ Format deadline salah!\nGunakan: *YYYY-MM-DDTHH:mm*\nContoh: _2026-05-20T08:00_' });
+        return;
+    }
+    const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal' });
+    const time = getTimeRemaining(deadline);
+    const msg = `✅ *Tugas berhasil ditambahkan!*\n──────────────────\n*Nama:* ${name}\n*Deadline:* ${formatDeadline(deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${detail || '-'}`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+async function cmdSelesai(sock, jid, args) {
+    const num = parseInt(args);
+    if (!num || num < 1) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!selesai <nomor>*\nContoh: _!selesai 1_\n\nKetik *!list* untuk melihat nomor tugas.' });
+        return;
+    }
+    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const task = tasks[num - 1];
+    if (!task) {
+        await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
+        return;
+    }
+    await Task.findByIdAndUpdate(task._id, { status: 'completed', completedAt: new Date() });
+    const remaining = tasks.length - 1;
+    await sock.sendMessage(jid, { text: `🎉 *${task.name}* telah diselesaikan!\n\n⏳ Sisa tugas aktif: ${remaining}` });
+}
+
+async function cmdHapus(sock, jid, args) {
+    const num = parseInt(args);
+    if (!num || num < 1) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!hapus <nomor>*\nContoh: _!hapus 1_' });
+        return;
+    }
+    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const task = tasks[num - 1];
+    if (!task) {
+        await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
+        return;
+    }
+    await Task.findByIdAndDelete(task._id);
+    await sock.sendMessage(jid, { text: `🗑️ *${task.name}* telah dihapus.` });
+}
+
+async function cmdStats(sock, jid) {
+    const all = await Task.find();
+    const completed = all.filter(t => t.status === 'completed');
+    const pending = all.filter(t => t.status !== 'completed');
+    const missed = pending.filter(t => {
+        if (!t.deadline) return false;
+        return new Date(t.deadline) < new Date();
+    });
+    const critical = pending.filter(t => {
+        if (!t.deadline) return false;
+        const diff = new Date(t.deadline) - new Date();
+        return diff > 0 && diff <= 3 * 3600000;
+    });
+
+    const bar = progressBar(completed.length, all.length);
+    let mood = '😐 Biasa saja';
+    const pct = all.length > 0 ? (completed.length / all.length) * 100 : 0;
+    if (pct >= 80) mood = '🏆 Luar biasa!';
+    else if (pct >= 60) mood = '💪 Bagus!';
+    else if (pct >= 40) mood = '👍 Lumayan';
+    else if (pct > 0) mood = '📈 Ayo semangat!';
+
+    const msg = `╔══════════════════════════╗
+     📊 *STATISTIK TUGAS*
+╚══════════════════════════╝
+
+📌 Total Tugas    : ${all.length}
+✅ Selesai        : ${completed.length}
+⏳ Pending        : ${pending.length}
+🔴 Terlewat       : ${missed.length}
+🚨 Kritis (≤3jam) : ${critical.length}
+
+[${bar}]
+
+${mood}`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+async function cmdInfo(sock, jid) {
+    const uptime = Math.floor((Date.now() - botStartTime.getTime()) / 60000);
+    const h = Math.floor(uptime / 60);
+    const m = uptime % 60;
+    const groups = await Setting.find();
+    const msg = `╔══════════════════════════╗
+     🤖 *INFO REMINDME BOT*
+╚══════════════════════════╝
+
+📡 Status: ${globalSock ? '🟢 Online' : '🔴 Offline'}
+⏱️ Uptime: ${h} jam ${m} menit
+🌐 Timezone: Asia/Makassar (WITA)
+📢 Grup terhubung: ${groups.length}
+🔔 Cron aktif:
+   • 08:00 — Pengingat pagi
+   • */15 mnt — Cek tugas kritis
+   • 21:00 — Preview besok
+
+📦 Versi: 2.0.0`;
+    await sock.sendMessage(jid, { text: msg });
+}
+
+// ═══════════════════════════════════════
+// BROADCAST REMINDER
+// ═══════════════════════════════════════
+
 async function broadcastReminder(sock, targetJid, mode = 'all') {
     const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
     if (tasks.length === 0 && targetJid) {
@@ -47,38 +272,44 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
     }
 
     const messages = [];
+    tasks.forEach((task, i) => {
+        const time = getTimeRemaining(task.deadline);
 
-    tasks.forEach(task => {
-        const timeInfo = getTimeRemaining(task.deadline);
-        if (timeInfo.diffMs === null) return;
-
-        const diffMs = timeInfo.diffMs;
-        const isH1 = diffMs > (24 * 60 * 60 * 1000) && diffMs <= (48 * 60 * 60 * 1000);
-        const isHariH = diffMs > 0 && diffMs <= (24 * 60 * 60 * 1000);
-        const isCritical = diffMs > 0 && diffMs <= (3 * 60 * 60 * 1000);
-        const isMissed = diffMs < 0;
-
-        // Jika mode 'critical', hanya kirim yang <= 3 jam atau terlewat
         if (mode === 'critical') {
-            if (isCritical || isMissed) {
-                let label = isMissed ? '🔴 TERLEWAT' : '🚨 DARURAT';
-                messages.push(`*${task.name}*\n[${label}] ${timeInfo.text}\n_${task.detail || ''}_`);
+            if (time.level === 'critical' || time.level === 'missed') {
+                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}`);
+            }
+        } else if (mode === 'evening') {
+            // Tugas yang deadline-nya besok (dalam 24 jam ke depan)
+            if (time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000) {
+                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
             }
         } else {
-            // Mode 'all': kirim semua yang relevan (untuk !list dan cron pagi)
-            if (targetJid || isH1 || isHariH || isCritical || isMissed) {
-                let label = isMissed ? '🔴 TERLEWAT' : (isCritical ? '🚨 DARURAT' : 'PENGINGAT');
-                messages.push(`*${task.name}*\n[${label}] ${timeInfo.text}\n_${task.detail || ''}_`);
+            // Mode 'all': semua tugas aktif
+            if (targetJid) {
+                // Manual !list — tampilkan semua termasuk tanpa deadline
+                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
+            } else {
+                // Auto broadcast — hanya yang punya deadline dan relevan
+                const isH1 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 172800000;
+                const isHariH = time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000;
+                const isCritical = time.level === 'critical';
+                const isMissed = time.level === 'missed';
+                if (isH1 || isHariH || isCritical || isMissed) {
+                    messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
+                }
             }
         }
     });
 
     if (messages.length > 0) {
-        const header = mode === 'critical'
-            ? `*[⚠️ PERINGATAN DEADLINE MENDEKAT]*`
-            : `*[SISTEM PENGINGAT TUGAS]*`;
-        const msgText = `${header}\n─────────────────────\n\n` + messages.join('\n\n') + `\n\n─────────────────────`;
-        
+        let header;
+        if (mode === 'critical') header = '⚠️ *DEADLINE MENDEKAT!*';
+        else if (mode === 'evening') header = '🌙 *PREVIEW TUGAS BESOK*';
+        else header = '📋 *PENGINGAT TUGAS*';
+
+        const msgText = `╔══════════════════════════╗\n     ${header}\n╚══════════════════════════╝\n\n${messages.join('\n\n')}\n\n──────────────────`;
+
         if (targetJid) {
             await sock.sendMessage(targetJid, { text: msgText });
         } else {
@@ -86,9 +317,9 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
             for (const s of allSettings) {
                 try {
                     await sock.sendMessage(s.reminderJid, { text: msgText });
-                    console.log(`📤 Notifikasi ${mode} terkirim ke ${s.reminderJid}`);
+                    console.log(`📤 [${mode}] terkirim ke ${s.reminderJid}`);
                 } catch (e) {
-                    console.error('❌ Gagal kirim notifikasi ke', s.reminderJid, e.message);
+                    console.error('❌ Gagal kirim ke', s.reminderJid, e.message);
                 }
             }
         }
@@ -97,29 +328,44 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
     }
 }
 
-// --- Monitor Database (Change Stream) ---
+// ═══════════════════════════════════════
+// CHANGE STREAM (Real-time DB monitor)
+// ═══════════════════════════════════════
+
 function setupChangeStream() {
-    // Tutup change stream lama sebelum buat yang baru
     if (activeChangeStream) {
-        console.log('🔄 Menutup Change Stream lama...');
         activeChangeStream.close().catch(() => {});
         activeChangeStream = null;
     }
 
-    console.log('📡 Memantau perubahan database untuk notifikasi real-time...');
-    const changeStream = Task.watch();
+    console.log('📡 Memantau perubahan database...');
+    const changeStream = Task.watch([], { fullDocument: 'updateLookup' });
     activeChangeStream = changeStream;
-    
+
     changeStream.on('change', async (change) => {
-        if (change.operationType === 'insert' && globalSock) {
-            const newTask = change.fullDocument;
-            const msg = `*[TUGAS BARU DITAMBAHKAN]*\n─────────────────────\n*Nama:* ${newTask.name}\n*Deadline:* ${newTask.deadline || '-'}\n*Detail:* ${newTask.detail || '-'}\n─────────────────────`;
-            
-            const allSettings = await Setting.find();
+        if (!globalSock) return;
+        const allSettings = await Setting.find();
+        if (allSettings.length === 0) return;
+
+        let msg = null;
+
+        if (change.operationType === 'insert') {
+            const t = change.fullDocument;
+            const time = getTimeRemaining(t.deadline);
+            msg = `📥 *Tugas Baru Ditambahkan*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal')}`;
+        } else if (change.operationType === 'update' && change.fullDocument) {
+            const t = change.fullDocument;
+            if (t.status === 'completed') {
+                msg = `✅ *Tugas Diselesaikan*\n──────────────────\n*${t.name}* telah ditandai selesai! 🎉`;
+            }
+        } else if (change.operationType === 'delete') {
+            msg = `🗑️ *Tugas Dihapus*\n──────────────────\nSatu tugas telah dihapus dari daftar.`;
+        }
+
+        if (msg) {
             for (const s of allSettings) {
-                try {
-                    await globalSock.sendMessage(s.reminderJid, { text: msg });
-                } catch (e) { console.error('Gagal kirim notifikasi ke', s.reminderJid); }
+                try { await globalSock.sendMessage(s.reminderJid, { text: msg }); }
+                catch (e) { console.error('❌ Notif gagal:', s.reminderJid); }
             }
         }
     });
@@ -127,20 +373,16 @@ function setupChangeStream() {
     changeStream.on('error', (err) => {
         console.error('Change Stream Error:', err.message);
         activeChangeStream = null;
-        // Restart change stream setelah delay
-        setTimeout(() => {
-            if (globalSock) setupChangeStream();
-        }, 10000);
+        setTimeout(() => { if (globalSock) setupChangeStream(); }, 10000);
     });
 }
 
-// --- WhatsApp Bot Logic ---
+// ═══════════════════════════════════════
+// WHATSAPP BOT
+// ═══════════════════════════════════════
+
 async function startBot() {
-    // Cegah reconnect bersamaan
-    if (isReconnecting) {
-        console.log('⏳ Sudah dalam proses reconnect, menunggu...');
-        return;
-    }
+    if (isReconnecting) return;
     isReconnecting = true;
 
     try {
@@ -158,23 +400,16 @@ async function startBot() {
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
             if (qr) qrcode.generate(qr, { small: true });
-            
+
             if (connection === 'close') {
                 globalSock = null;
-                const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                
-                console.log(`⚠️ Koneksi terputus (status: ${statusCode}). Reconnect: ${shouldReconnect}`);
-                
+                const code = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = code !== DisconnectReason.loggedOut;
+                console.log(`⚠️ Koneksi terputus (${code}). Reconnect: ${shouldReconnect}`);
+                isReconnecting = false;
                 if (shouldReconnect) {
-                    // Delay sebelum reconnect untuk menghindari loop cepat
-                    isReconnecting = false;
-                    const delay = 5000; // 5 detik
-                    console.log(`🔄 Reconnect dalam ${delay / 1000} detik...`);
-                    setTimeout(() => startBot(), delay);
-                } else {
-                    console.log('🚫 Bot di-logout. Hapus session dan scan QR ulang.');
-                    isReconnecting = false;
+                    console.log('🔄 Reconnect dalam 5 detik...');
+                    setTimeout(() => startBot(), 5000);
                 }
             } else if (connection === 'open') {
                 console.log('✅ Bot WhatsApp sudah aktif!');
@@ -182,14 +417,9 @@ async function startBot() {
                 isReconnecting = false;
                 setupChangeStream();
 
-                // Langsung cek tugas kritis saat pertama kali terhubung
                 setTimeout(async () => {
-                    console.log('🔍 Cek awal tugas kritis setelah connect...');
-                    try {
-                        await broadcastReminder(sock, null, 'critical');
-                    } catch (e) {
-                        console.error('❌ Gagal cek awal:', e.message);
-                    }
+                    try { await broadcastReminder(sock, null, 'critical'); }
+                    catch (e) { console.error('❌ Cek awal gagal:', e.message); }
                 }, 3000);
             }
         });
@@ -201,44 +431,73 @@ async function startBot() {
             const jid = msg.key.remoteJid;
             const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
 
-            if (text === '!menu' || text === '!help') {
-                await sock.sendMessage(jid, { text: '*PERINTAH BOT*\n!list - Daftar tugas\n!setgrup - Aktifkan pengingat di sini\n!hapusgrup - Matikan pengingat' });
-            } else if (text === '!list') {
-                await broadcastReminder(sock, jid, 'all');
-            } else if (text === '!setgrup') {
-                await Setting.findOneAndUpdate({ reminderJid: jid }, { reminderJid: jid }, { upsert: true });
-                await sock.sendMessage(jid, { text: '✅ Grup ini akan menerima pengingat otomatis.' });
+            if (!text.startsWith('!')) return;
+
+            const [cmd, ...rest] = text.split(' ');
+            const args = rest.join(' ').trim();
+
+            try {
+                switch (cmd.toLowerCase()) {
+                    case '!menu': case '!help':
+                        await cmdMenu(sock, jid); break;
+                    case '!list':
+                        await cmdList(sock, jid); break;
+                    case '!detail':
+                        await cmdDetail(sock, jid, args); break;
+                    case '!tambah':
+                        await cmdTambah(sock, jid, args); break;
+                    case '!selesai':
+                        await cmdSelesai(sock, jid, args); break;
+                    case '!hapus':
+                        await cmdHapus(sock, jid, args); break;
+                    case '!stats':
+                        await cmdStats(sock, jid); break;
+                    case '!info':
+                        await cmdInfo(sock, jid); break;
+                    case '!setgrup':
+                        await Setting.findOneAndUpdate({ reminderJid: jid }, { reminderJid: jid }, { upsert: true });
+                        await sock.sendMessage(jid, { text: '✅ Grup ini akan menerima pengingat otomatis.' });
+                        break;
+                    case '!hapusgrup':
+                        await Setting.findOneAndDelete({ reminderJid: jid });
+                        await sock.sendMessage(jid, { text: '🔕 Pengingat otomatis dimatikan untuk grup ini.' });
+                        break;
+                    default:
+                        await sock.sendMessage(jid, { text: '❓ Perintah tidak dikenali. Ketik *!menu* untuk bantuan.' });
+                }
+            } catch (err) {
+                console.error('❌ Command error:', err);
+                await sock.sendMessage(jid, { text: '❌ Terjadi kesalahan. Coba lagi nanti.' });
             }
         });
     } catch (err) {
         console.error('❌ Gagal memulai bot:', err.message);
         isReconnecting = false;
-        // Coba lagi setelah 10 detik
         setTimeout(() => startBot(), 10000);
     }
 }
 
-// --- Cron Jobs ---
+// ═══════════════════════════════════════
+// CRON JOBS
+// ═══════════════════════════════════════
 
-// Pengingat pagi: kirim SEMUA tugas aktif yang punya deadline (jam 8 pagi)
+// Pengingat pagi jam 8
 cron.schedule('0 8 * * *', async () => {
-    console.log('⏰ Cron pagi: mengirim semua pengingat...');
-    if (globalSock) {
-        await broadcastReminder(globalSock, null, 'all');
-    } else {
-        console.log('⚠️ Cron pagi: Bot belum terhubung, skip.');
-    }
+    console.log('⏰ Cron pagi: semua pengingat');
+    if (globalSock) await broadcastReminder(globalSock, null, 'all');
 }, { timezone: "Asia/Makassar" });
 
-// Pengingat setiap 15 MENIT: cek tugas kritis (deadline <= 3 jam atau terlewat)
+// Cek tugas kritis setiap 15 menit
 cron.schedule('*/15 * * * *', async () => {
     const now = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar' });
-    console.log(`⏰ [${now}] Cron 15-menit: mengecek tugas kritis (≤3 jam)...`);
-    if (globalSock) {
-        await broadcastReminder(globalSock, null, 'critical');
-    } else {
-        console.log('⚠️ Cron 15-menit: Bot belum terhubung, skip.');
-    }
+    console.log(`⏰ [${now}] Cek tugas kritis`);
+    if (globalSock) await broadcastReminder(globalSock, null, 'critical');
+}, { timezone: "Asia/Makassar" });
+
+// Preview besok jam 21
+cron.schedule('0 21 * * *', async () => {
+    console.log('⏰ Cron malam: preview besok');
+    if (globalSock) await broadcastReminder(globalSock, null, 'evening');
 }, { timezone: "Asia/Makassar" });
 
 startBot();

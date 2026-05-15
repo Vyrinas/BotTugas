@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RemindMe - Dashboard Pengingat Tugas</title>
+    <meta name="description" content="Dashboard pengingat tugas otomatis terintegrasi WhatsApp">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 </head>
 
@@ -14,22 +15,72 @@
     <div class="background-blobs">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
     </div>
 
     <div class="container glass-panel">
         <header>
             <div class="header-title">
                 <i class="ri-checkbox-multiple-line logo-icon"></i>
-            <h1>RemindMe</h1>
+                <h1>RemindMe</h1>
+            </div>
             <p class="subtitle">Manajemen tugas otomatis terintegrasi WhatsApp</p>
-            <div style="background: rgba(255,255,255,0.1); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); color: #fff;">
+            <div class="timezone-badge">
                 <i class="ri-time-line"></i> Zona Waktu: <b>WITA (Asia/Makassar)</b>
             </div>
         </header>
 
+        <!-- Stats Cards -->
+        <section class="stats-section" id="stats-section">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(99,102,241,0.15); color: #a5b4fc;">
+                        <i class="ri-file-list-3-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-total">-</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #6ee7b7;">
+                        <i class="ri-check-double-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-completed">-</span>
+                        <span class="stat-label">Selesai</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #fcd34d;">
+                        <i class="ri-time-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-pending">-</span>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #fca5a5;">
+                        <i class="ri-alarm-warning-line"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-missed">-</span>
+                        <span class="stat-label">Terlewat</span>
+                    </div>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+                <span class="progress-label" id="progress-label">0% selesai</span>
+            </div>
+        </section>
+
         <main>
             <section class="add-task-section">
-                <h2>Tambah Tugas Baru</h2>
+                <h2><i class="ri-add-circle-line"></i> Tambah Tugas Baru</h2>
                 <form id="task-form">
                     <div class="input-group">
                         <i class="ri-edit-2-line input-icon"></i>
@@ -40,20 +91,36 @@
                         <i class="ri-file-text-line input-icon" style="top: 14px;"></i>
                         <textarea id="task-detail" placeholder="Detail tugas (opsional)" rows="2"></textarea>
                     </div>
-                    <div class="input-group">
-                        <i class="ri-calendar-event-line input-icon"></i>
-                        <input type="datetime-local" id="task-date">
+                    <div class="form-row">
+                        <div class="input-group flex-grow">
+                            <i class="ri-calendar-event-line input-icon"></i>
+                            <input type="datetime-local" id="task-date">
+                        </div>
+                        <div class="input-group priority-group">
+                            <i class="ri-flag-line input-icon"></i>
+                            <select id="task-priority">
+                                <option value="normal">📌 Normal</option>
+                                <option value="high">🔥 Tinggi</option>
+                                <option value="low">📎 Rendah</option>
+                            </select>
+                        </div>
                     </div>
                     <button type="submit" class="btn-primary">
-                        <i class="ri-add-line"></i> Tambah
+                        <i class="ri-add-line"></i> Tambah Tugas
                     </button>
                 </form>
             </section>
 
             <div class="tabs">
-                <button class="tab-btn active" data-target="pending">Belum Selesai</button>
-                <button class="tab-btn" data-target="completed">Selesai</button>
-                <button class="tab-btn" data-target="settings">Grup Terhubung</button>
+                <button class="tab-btn active" data-target="pending">
+                    <i class="ri-time-line"></i> Belum Selesai
+                </button>
+                <button class="tab-btn" data-target="completed">
+                    <i class="ri-check-line"></i> Selesai
+                </button>
+                <button class="tab-btn" data-target="settings">
+                    <i class="ri-group-line"></i> Grup
+                </button>
             </div>
 
             <section class="task-list-section">
@@ -72,7 +139,7 @@
 
                 <div id="settings" class="tab-content">
                     <div class="settings-header">
-                        <p class="settings-hint"><i class="ri-information-line"></i> Daftar grup yang akan menerima notifikasi otomatis. Anda bisa menghapus grup dari sini tanpa harus mengetik perintah di WhatsApp.</p>
+                        <p class="settings-hint"><i class="ri-information-line"></i> Daftar grup yang menerima notifikasi otomatis. Gunakan <b>!setgrup</b> di WhatsApp untuk menambah.</p>
                     </div>
                     <ul id="group-list" class="task-list">
                         <div class="empty-state">
@@ -85,14 +152,14 @@
         </main>
 
         <footer>
-            <p>Bot Pengingat Tugas &copy; 2026</p>
+            <p>RemindMe Bot v2.0 &copy; 2026</p>
         </footer>
     </div>
 
     <!-- Edit Modal -->
     <div class="modal-overlay" id="edit-modal">
         <div class="modal glass-panel">
-            <h2>Edit Tugas</h2>
+            <h2><i class="ri-pencil-line"></i> Edit Tugas</h2>
             <form id="edit-form">
                 <input type="hidden" id="edit-id">
                 <div class="input-group">
@@ -101,8 +168,17 @@
                 <div class="input-group">
                     <textarea id="edit-detail" placeholder="Detail tugas" rows="2"></textarea>
                 </div>
-                <div class="input-group">
-                    <input type="datetime-local" id="edit-date">
+                <div class="form-row">
+                    <div class="input-group flex-grow">
+                        <input type="datetime-local" id="edit-date">
+                    </div>
+                    <div class="input-group priority-group">
+                        <select id="edit-priority">
+                            <option value="normal">📌 Normal</option>
+                            <option value="high">🔥 Tinggi</option>
+                            <option value="low">📎 Rendah</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>

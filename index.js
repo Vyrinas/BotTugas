@@ -11,7 +11,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Middleware untuk memastikan koneksi DB
 app.use(async (req, res, next) => {
     await connectDB();
     next();
@@ -23,6 +22,28 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
+// --- STATS ---
+app.get('/api/stats', async (req, res) => {
+    try {
+        const all = await Task.find();
+        const completed = all.filter(t => t.status === 'completed').length;
+        const pending = all.filter(t => t.status !== 'completed').length;
+        const missed = all.filter(t => {
+            if (t.status === 'completed' || !t.deadline) return false;
+            return new Date(t.deadline) < new Date();
+        }).length;
+        const critical = all.filter(t => {
+            if (t.status === 'completed' || !t.deadline) return false;
+            const diff = new Date(t.deadline) - new Date();
+            return diff > 0 && diff <= 3 * 3600000;
+        }).length;
+        res.json({ total: all.length, completed, pending, missed, critical });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengambil statistik' });
+    }
+});
+
+// --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
     try {
         const tasks = await Task.find().sort({ createdAt: 1 });
@@ -33,25 +54,35 @@ app.get('/api/tasks', async (req, res) => {
 });
 
 app.post('/api/tasks', async (req, res) => {
-    const { name, date, detail } = req.body;
+    const { name, date, detail, priority } = req.body;
     if (!name) return res.status(400).json({ error: 'Nama tugas wajib diisi' });
 
     try {
-        // Cukup simpan ke DB. Bot akan mendeteksi via Change Stream atau Cron.
-        const task = await Task.create({ name, deadline: date || '', detail: detail || '', status: 'pending' });
-        res.status(201).json({ message: 'Tugas ditambahkan ke database', task });
+        const task = await Task.create({
+            name,
+            deadline: date || '',
+            detail: detail || '',
+            status: 'pending',
+            priority: priority || 'normal'
+        });
+        res.status(201).json({ message: 'Tugas ditambahkan', task });
     } catch (error) {
         res.status(500).json({ error: 'Gagal menambah tugas' });
     }
 });
 
 app.put('/api/tasks/:id', async (req, res) => {
-    const { name, date, detail } = req.body;
+    const { name, date, detail, priority } = req.body;
     try {
         const tasks = await Task.find().sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
-            await Task.findByIdAndUpdate(tasks[id]._id, { name, deadline: date || '', detail: detail !== undefined ? detail : tasks[id].detail });
+            await Task.findByIdAndUpdate(tasks[id]._id, {
+                name,
+                deadline: date || '',
+                detail: detail !== undefined ? detail : tasks[id].detail,
+                priority: priority || tasks[id].priority || 'normal'
+            });
             res.json({ message: 'Tugas diedit' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });
@@ -67,7 +98,9 @@ app.patch('/api/tasks/:id', async (req, res) => {
         const tasks = await Task.find().sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
-            await Task.findByIdAndUpdate(tasks[id]._id, { status });
+            const update = { status };
+            if (status === 'completed') update.completedAt = new Date();
+            await Task.findByIdAndUpdate(tasks[id]._id, update);
             res.json({ message: 'Status diupdate' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });
@@ -92,7 +125,7 @@ app.delete('/api/tasks/:id', async (req, res) => {
     }
 });
 
-// --- API UNTUK MANAJEMEN GRUP ---
+// --- SETTINGS ---
 app.get('/api/settings', async (req, res) => {
     try {
         const settings = await Setting.find();

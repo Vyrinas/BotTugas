@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 let isConnected = false;
 
 const connectDB = async () => {
-    // Jangan konek ulang jika sudah terhubung
     if (isConnected || mongoose.connection.readyState === 1) {
         return;
     }
@@ -16,7 +15,6 @@ const connectDB = async () => {
         isConnected = true;
         console.log('✅ Berhasil terhubung ke MongoDB Atlas!');
 
-        // Handle disconnect event
         mongoose.connection.on('disconnected', () => {
             isConnected = false;
             console.log('⚠️ MongoDB terputus.');
@@ -32,7 +30,9 @@ const taskSchema = new mongoose.Schema({
     name: { type: String, required: true },
     detail: { type: String, default: '' },
     deadline: { type: String, default: '' },
-    status: { type: String, default: 'pending' }
+    status: { type: String, default: 'pending' },
+    priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
+    completedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 const settingSchema = new mongoose.Schema({
