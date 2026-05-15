@@ -63,9 +63,9 @@ function progressBar(done, total, len = 12) {
 // ═══════════════════════════════════════
 
 async function cmdMenu(sock, jid) {
-    const msg = `╔══════════════════════════╗
-     📋 *REMINDME BOT*
-╚══════════════════════════╝
+    const msg = `╔═══════════════════╗
+   📋 *REMINDME BOT*
+╚═══════════════════╝
 
 📝 *Manajemen Tugas*
 ├ !list — Daftar semua tugas
@@ -89,7 +89,7 @@ _!selesai 1_`;
 async function cmdList(sock, jid) {
     const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
     if (tasks.length === 0) {
-        await sock.sendMessage(jid, { text: '╔══════════════════════════╗\n     📋 *DAFTAR TUGAS*\n╚══════════════════════════╝\n\n✨ Tidak ada tugas aktif!\nGunakan *!tambah* untuk menambah tugas.' });
+        await sock.sendMessage(jid, { text: '╔═══════════════════╗\n   📋 *DAFTAR TUGAS*\n╚═══════════════════╝\n\n✨ Tidak ada tugas aktif!\nGunakan *!tambah* untuk menambah tugas.' });
         return;
     }
 
@@ -100,7 +100,7 @@ async function cmdList(sock, jid) {
     tasks.forEach((task, i) => {
         const time = getTimeRemaining(task.deadline);
         const pIcon = priorityIcon(task.priority);
-        let line = `${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}`;
+        let line = `${i + 1}. *${task.name}*\n   ${time.label} ${time.text}`;
         if (task.deadline) line += `\n   📅 ${formatDeadline(task.deadline)}`;
         if (task.detail) line += `\n   📝 _${task.detail}_`;
         line += `\n   ${pIcon} ${(task.priority || 'normal').charAt(0).toUpperCase() + (task.priority || 'normal').slice(1)}`;
@@ -108,9 +108,9 @@ async function cmdList(sock, jid) {
     });
 
     const bar = progressBar(completed, allTasks.length);
-    const msg = `╔══════════════════════════╗
-     📋 *DAFTAR TUGAS AKTIF*
-╚══════════════════════════╝
+    const msg = `╔═══════════════════╗
+   📋 *DAFTAR TUGAS AKTIF*
+╚═══════════════════╝
 
 ${lines.join('\n\n')}
 
@@ -133,9 +133,9 @@ async function cmdDetail(sock, jid, args) {
         return;
     }
     const time = getTimeRemaining(task.deadline);
-    const msg = `╔══════════════════════════╗
-     📄 *DETAIL TUGAS #${num}*
-╚══════════════════════════╝
+    const msg = `╔═══════════════════╗
+   📄 *DETAIL TUGAS #${num}*
+╚═══════════════════╝
 
 *Nama:* ${task.name}
 *Deadline:* ${formatDeadline(task.deadline)}
@@ -222,9 +222,9 @@ async function cmdStats(sock, jid) {
     else if (pct >= 40) mood = '👍 Lumayan';
     else if (pct > 0) mood = '📈 Ayo semangat!';
 
-    const msg = `╔══════════════════════════╗
-     📊 *STATISTIK TUGAS*
-╚══════════════════════════╝
+    const msg = `╔═══════════════════╗
+   📊 *STATISTIK TUGAS*
+╚═══════════════════╝
 
 📌 Total Tugas    : ${all.length}
 ✅ Selesai        : ${completed.length}
@@ -243,9 +243,9 @@ async function cmdInfo(sock, jid) {
     const h = Math.floor(uptime / 60);
     const m = uptime % 60;
     const groups = await Setting.find();
-    const msg = `╔══════════════════════════╗
-     🤖 *INFO REMINDME BOT*
-╚══════════════════════════╝
+    const msg = `╔═══════════════════╗
+   🤖 *INFO REMINDME BOT*
+╚═══════════════════╝
 
 📡 Status: ${globalSock ? '🟢 Online' : '🔴 Offline'}
 ⏱️ Uptime: ${h} jam ${m} menit
@@ -277,18 +277,18 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
 
         if (mode === 'critical') {
             if (time.level === 'critical' || time.level === 'missed') {
-                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}`);
+                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}`);
             }
         } else if (mode === 'evening') {
             // Tugas yang deadline-nya besok (dalam 24 jam ke depan)
             if (time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000) {
-                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
+                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
             }
         } else {
             // Mode 'all': semua tugas aktif
             if (targetJid) {
                 // Manual !list — tampilkan semua termasuk tanpa deadline
-                messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
+                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
             } else {
                 // Auto broadcast — hanya yang punya deadline dan relevan
                 const isH1 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 172800000;
@@ -296,7 +296,7 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
                 const isCritical = time.level === 'critical';
                 const isMissed = time.level === 'missed';
                 if (isH1 || isHariH || isCritical || isMissed) {
-                    messages.push(`${i + 1}️⃣ *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
+                    messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
                 }
             }
         }
@@ -308,7 +308,7 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
         else if (mode === 'evening') header = '🌙 *PREVIEW TUGAS BESOK*';
         else header = '📋 *PENGINGAT TUGAS*';
 
-        const msgText = `╔══════════════════════════╗\n     ${header}\n╚══════════════════════════╝\n\n${messages.join('\n\n')}\n\n──────────────────`;
+        const msgText = `╔═══════════════════╗\n   ${header}\n╚═══════════════════╝\n\n${messages.join('\n\n')}\n\n──────────────────`;
 
         if (targetJid) {
             await sock.sendMessage(targetJid, { text: msgText });
