@@ -1,13 +1,28 @@
 const mongoose = require('mongoose');
 
+let isConnected = false;
+
 const connectDB = async () => {
+    // Jangan konek ulang jika sudah terhubung
+    if (isConnected || mongoose.connection.readyState === 1) {
+        return;
+    }
+
     try {
         await mongoose.connect(process.env.MONGODB_URI, {
-            serverSelectionTimeoutMS: 15000, // Tunggu 15 detik sebelum timeout
-            heartbeatFrequencyMS: 10000,     // Cek detak jantung koneksi setiap 10 detik
+            serverSelectionTimeoutMS: 15000,
+            heartbeatFrequencyMS: 10000,
         });
+        isConnected = true;
         console.log('✅ Berhasil terhubung ke MongoDB Atlas!');
+
+        // Handle disconnect event
+        mongoose.connection.on('disconnected', () => {
+            isConnected = false;
+            console.log('⚠️ MongoDB terputus.');
+        });
     } catch (error) {
+        isConnected = false;
         console.error('❌ Gagal terhubung ke MongoDB:', error);
         process.exit(1);
     }
