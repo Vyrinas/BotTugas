@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RemindMe - Dashboard Pengingat Tugas</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container glass-panel">
+        <header>
+            <div class="header-title">
+                <i class="ri-checkbox-multiple-line logo-icon"></i>
+            <h1>RemindMe</h1>
+            <p class="subtitle">Manajemen tugas otomatis terintegrasi WhatsApp</p>
+            <div style="background: rgba(255,255,255,0.1); display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); color: #fff;">
+                <i class="ri-time-line"></i> Zona Waktu: <b>WITA (Asia/Makassar)</b>
+            </div>
+        </header>
+
+        <main>
+            <section class="add-task-section">
+                <h2>Tambah Tugas Baru</h2>
+                <form id="task-form">
+                    <div class="input-group">
+                        <i class="ri-edit-2-line input-icon"></i>
+                        <input type="text" id="task-name" placeholder="Nama Tugas (Misal: Makalah Sejarah)" required
+                            autocomplete="off">
+                    </div>
+                    <div class="input-group">
+                        <i class="ri-file-text-line input-icon" style="top: 14px;"></i>
+                        <textarea id="task-detail" placeholder="Detail tugas (opsional)" rows="2"></textarea>
+                    </div>
+                    <div class="input-group">
+                        <i class="ri-calendar-event-line input-icon"></i>
+                        <input type="datetime-local" id="task-date">
+                    </div>
+                    <button type="submit" class="btn-primary">
+                        <i class="ri-add-line"></i> Tambah
+                    </button>
+                </form>
+            </section>
+
+            <div class="tabs">
+                <button class="tab-btn active" data-target="pending">Belum Selesai</button>
+                <button class="tab-btn" data-target="completed">Selesai</button>
+            </div>
+
+            <section class="task-list-section">
+                <div id="pending" class="tab-content active">
+                    <ul id="task-list" class="task-list">
+                        <!-- Tasks will be injected here via JS -->
+                        <div class="empty-state">
+                            <i class="ri-loader-4-line spin"></i>
+                            <p>Memuat tugas...</p>
+                        </div>
+                    </ul>
+                </div>
+
+                <div id="completed" class="tab-content">
+                    <ul id="completed-list" class="task-list">
+                        <!-- Completed tasks injected here -->
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Bot Pengingat Tugas &copy; 2026</p>
+        </footer>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal glass-panel">
+            <h2>Edit Tugas</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <div class="input-group">
+                    <input type="text" id="edit-name" required placeholder="Nama Tugas">
+                </div>
+                <div class="input-group">
+                    <textarea id="edit-detail" placeholder="Detail tugas" rows="2"></textarea>
+                </div>
+                <div class="input-group">
+                    <input type="datetime-local" id="edit-date">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>
+                    <button type="submit" class="btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
