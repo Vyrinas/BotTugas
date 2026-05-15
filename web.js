@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { connectDB, Task } = require('./database');
 
 const app = express();
@@ -14,6 +15,10 @@ app.use(express.static(__dirname));
 app.use(async (req, res, next) => {
     await connectDB();
     next();
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
