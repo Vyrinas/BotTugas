@@ -253,7 +253,7 @@ async function cmdInfo(sock, jid) {
 📢 Grup terhubung: ${groups.length}
 🔔 Cron aktif:
    • 08:00 — Pengingat pagi
-   • */15 mnt — Cek tugas kritis
+   • Setiap jam — Cek tugas kritis
    • 21:00 — Preview besok
 
 📦 Versi: 2.0.0`;
@@ -487,8 +487,8 @@ cron.schedule('0 8 * * *', async () => {
     if (globalSock) await broadcastReminder(globalSock, null, 'all');
 }, { timezone: "Asia/Makassar" });
 
-// Cek tugas kritis setiap 15 menit
-cron.schedule('*/15 * * * *', async () => {
+// Cek tugas kritis setiap jam
+cron.schedule('0 * * * *', async () => {
     const now = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar' });
     console.log(`⏰ [${now}] Cek tugas kritis`);
     if (globalSock) await broadcastReminder(globalSock, null, 'critical');
