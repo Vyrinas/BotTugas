@@ -525,22 +525,35 @@ async function startBot() {
 
             const jid = msg.key.remoteJid;
 
+            // Unwrap viewOnceMessage / ephemeralMessage to get inner content
+            let innerMsg = msg.message;
+            if (innerMsg?.viewOnceMessage?.message) innerMsg = innerMsg.viewOnceMessage.message;
+            if (innerMsg?.ephemeralMessage?.message) innerMsg = innerMsg.ephemeralMessage.message;
+            if (innerMsg?.viewOnceMessageV2?.message) innerMsg = innerMsg.viewOnceMessageV2.message;
+
             // Handle interactive button responses
-            const btnResponse = msg.message.buttonsResponseMessage?.selectedButtonId
-                || msg.message.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
-            const listResponse = msg.message.listResponseMessage?.singleSelectReply?.selectedRowId;
+            const btnResponseId = innerMsg?.buttonsResponseMessage?.selectedButtonId;
+            const nativeFlowJson = innerMsg?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+            const listResponseId = innerMsg?.listResponseMessage?.singleSelectReply?.selectedRowId;
+            const templateBtnId = innerMsg?.templateButtonReplyMessage?.selectedId;
 
             let text = '';
-            if (btnResponse) {
-                let btnId = btnResponse;
-                // Parse native flow JSON if needed
-                try { const parsed = JSON.parse(btnId); btnId = parsed.id || btnId; } catch (_) {}
-                // Map button IDs to commands
+            if (btnResponseId) {
+                text = mapButtonToCommand(btnResponseId);
+                console.log('🔘 Button response:', btnResponseId, '→', text);
+            } else if (nativeFlowJson) {
+                let btnId = '';
+                try { btnId = JSON.parse(nativeFlowJson).id || ''; } catch (_) {}
                 text = mapButtonToCommand(btnId);
-            } else if (listResponse) {
-                text = mapButtonToCommand(listResponse);
+                console.log('🔘 NativeFlow response:', nativeFlowJson, '→', text);
+            } else if (listResponseId) {
+                text = mapButtonToCommand(listResponseId);
+                console.log('🔘 List response:', listResponseId, '→', text);
+            } else if (templateBtnId) {
+                text = mapButtonToCommand(templateBtnId);
+                console.log('🔘 Template response:', templateBtnId, '→', text);
             } else {
-                text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
+                text = (innerMsg?.conversation || innerMsg?.extendedTextMessage?.text || '').trim();
             }
 
             if (!text.startsWith('!')) return;
