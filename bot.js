@@ -432,8 +432,13 @@ function setupChangeStream() {
             }
         } else if (change.operationType === 'update' && change.fullDocument) {
             const t = change.fullDocument;
-            if (t.status === 'completed') {
+            const updatedFields = change.updateDescription?.updatedFields || {};
+
+            if (updatedFields.status === 'completed') {
                 msg = `✅ *Tugas Diselesaikan*\n──────────────────\n*${t.name}* telah ditandai selesai! 🎉`;
+            } else if (!updatedFields.status && Object.keys(updatedFields).length > 0 && !t.silent) {
+                const time = getTimeRemaining(t.deadline);
+                msg = `✏️ *Tugas Diedit*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal').charAt(0).toUpperCase() + (t.priority || 'normal').slice(1)}`;
             }
         } else if (change.operationType === 'delete') {
             msg = `🗑️ *Tugas Dihapus*\n──────────────────\nSatu tugas telah dihapus dari daftar.`;
