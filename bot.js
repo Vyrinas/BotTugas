@@ -164,11 +164,14 @@ async function cmdList(sock, jid) {
     // Build action buttons based on task count
     const btns = [];
     if (tasks.length >= 1) btns.push({ id: 'btn_detail_1', displayText: '📄 Detail #1' });
-    if (tasks.length >= 1) btns.push({ id: 'btn_selesai_1', displayText: '✅ Selesai #1' });
     if (tasks.length >= 2) btns.push({ id: 'btn_detail_2', displayText: '📄 Detail #2' });
+    btns.push({ id: 'btn_menu', displayText: '📋 Menu Utama' });
 
-    if (btns.length > 0) {
-        await sendButtons(sock, jid, body, btns, '⬆️ Pilih aksi cepat | Ketik !detail <no> untuk tugas lain');
+    // Ensure we don't exceed max 3 buttons for WhatsApp
+    const finalBtns = btns.slice(0, 3);
+    
+    if (finalBtns.length > 0) {
+        await sendButtons(sock, jid, body, finalBtns, '⬆️ Pilih aksi cepat | Ketik !detail <no> untuk tugas lain');
     } else {
         await sock.sendMessage(jid, { text: body });
     }
