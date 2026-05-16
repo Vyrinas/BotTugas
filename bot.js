@@ -24,9 +24,15 @@ async function getInteractive() {
 
 async function sendButtons(sock, jid, body, buttons, footer) {
     try {
-        const { generateQuickReplyButtons } = await getInteractive();
-        const msg = generateQuickReplyButtons(body, buttons, { footer });
-        await sock.sendMessage(jid, msg);
+        const { generateQuickReplyButtons, generateWAMessageFromContent, generateMessageIDV2 } = await getInteractive();
+        const content = generateQuickReplyButtons(body, buttons, { footer });
+        // Wrap in viewOnceMessage to make interactive buttons work
+        const msgContent = { viewOnceMessage: { message: content } };
+        const msg = generateWAMessageFromContent(jid, msgContent, {
+            userJid: sock.user.id,
+            messageId: generateMessageIDV2()
+        });
+        await sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
     } catch (e) {
         console.error('⚠️ Button gagal, fallback ke teks:', e.message);
         await sock.sendMessage(jid, { text: body + (footer ? '\n\n' + footer : '') });
@@ -35,9 +41,14 @@ async function sendButtons(sock, jid, body, buttons, footer) {
 
 async function sendList(sock, jid, content) {
     try {
-        const { generateInteractiveListMessage } = await getInteractive();
-        const msg = generateInteractiveListMessage(content);
-        await sock.sendMessage(jid, msg);
+        const { generateInteractiveListMessage, generateWAMessageFromContent, generateMessageIDV2 } = await getInteractive();
+        const listContent = generateInteractiveListMessage(content);
+        const msgContent = { viewOnceMessage: { message: listContent } };
+        const msg = generateWAMessageFromContent(jid, msgContent, {
+            userJid: sock.user.id,
+            messageId: generateMessageIDV2()
+        });
+        await sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
     } catch (e) {
         console.error('⚠️ List gagal, fallback ke teks:', e.message);
         await sock.sendMessage(jid, { text: content.title });
