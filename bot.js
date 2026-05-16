@@ -12,6 +12,38 @@ let activeChangeStream = null;
 let isReconnecting = false;
 const botStartTime = new Date();
 
+// Lazy-loaded interactive message utilities
+let _interactiveUtils = null;
+async function getInteractive() {
+    if (!_interactiveUtils) {
+        const mod = await import('baileys-joss');
+        _interactiveUtils = mod;
+    }
+    return _interactiveUtils;
+}
+
+async function sendButtons(sock, jid, body, buttons, footer) {
+    try {
+        const { generateQuickReplyButtons } = await getInteractive();
+        const msg = generateQuickReplyButtons(body, buttons, { footer });
+        await sock.sendMessage(jid, msg);
+    } catch (e) {
+        console.error('⚠️ Button gagal, fallback ke teks:', e.message);
+        await sock.sendMessage(jid, { text: body + (footer ? '\n\n' + footer : '') });
+    }
+}
+
+async function sendList(sock, jid, content) {
+    try {
+        const { generateInteractiveListMessage } = await getInteractive();
+        const msg = generateInteractiveListMessage(content);
+        await sock.sendMessage(jid, msg);
+    } catch (e) {
+        console.error('⚠️ List gagal, fallback ke teks:', e.message);
+        await sock.sendMessage(jid, { text: content.title });
+    }
+}
+
 // ═══════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════
@@ -63,7 +95,7 @@ function progressBar(done, total, len = 12) {
 // ═══════════════════════════════════════
 
 async function cmdMenu(sock, jid) {
-    const msg = `╔═══════════════════╗
+    const body = `╔═══════════════════╗
    📋 *REMINDME BOT*
 ╚═══════════════════╝
 
@@ -81,15 +113,23 @@ async function cmdMenu(sock, jid) {
 └ !info — Info bot
 
 💡 *Contoh:*
-_!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_
-_!selesai 1_`;
-    await sock.sendMessage(jid, { text: msg });
+_!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_`;
+
+    await sendButtons(sock, jid, body, [
+        { id: 'btn_list', displayText: '📋 Daftar Tugas' },
+        { id: 'btn_stats', displayText: '📊 Statistik' },
+        { id: 'btn_info', displayText: '🤖 Info Bot' }
+    ], '⬆️ Pilih menu di atas');
 }
 
 async function cmdList(sock, jid) {
     const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
     if (tasks.length === 0) {
-        await sock.sendMessage(jid, { text: '╔═══════════════════╗\n   📋 *DAFTAR TUGAS*\n╚═══════════════════╝\n\n✨ Tidak ada tugas aktif!\nGunakan *!tambah* untuk menambah tugas.' });
+        await sendButtons(sock, jid,
+            '╔═══════════════════╗\n   📋 *DAFTAR TUGAS*\n╚═══════════════════╝\n\n✨ Tidak ada tugas aktif!',
+            [{ id: 'btn_menu', displayText: '📋 Menu Utama' }],
+            'Gunakan *!tambah* untuk menambah tugas.'
+        );
         return;
     }
 
@@ -108,16 +148,19 @@ async function cmdList(sock, jid) {
     });
 
     const bar = progressBar(completed, allTasks.length);
-    const msg = `╔═══════════════════╗
-   📋 *DAFTAR TUGAS AKTIF*
-╚═══════════════════╝
+    const body = `╔═══════════════════╗\n   📋 *DAFTAR TUGAS AKTIF*\n╚═══════════════════╝\n\n${lines.join('\n\n')}\n\n──────────────────\n📊 Total: ${allTasks.length} | ✅ ${completed} | ⏳ ${tasks.length}\n[${bar}]`;
 
-${lines.join('\n\n')}
+    // Build action buttons based on task count
+    const btns = [];
+    if (tasks.length >= 1) btns.push({ id: 'btn_detail_1', displayText: '📄 Detail #1' });
+    if (tasks.length >= 1) btns.push({ id: 'btn_selesai_1', displayText: '✅ Selesai #1' });
+    if (tasks.length >= 2) btns.push({ id: 'btn_detail_2', displayText: '📄 Detail #2' });
 
-──────────────────
-📊 Total: ${allTasks.length} | ✅ ${completed} | ⏳ ${tasks.length}
-[${bar}]`;
-    await sock.sendMessage(jid, { text: msg });
+    if (btns.length > 0) {
+        await sendButtons(sock, jid, body, btns, '⬆️ Pilih aksi cepat | Ketik !detail <no> untuk tugas lain');
+    } else {
+        await sock.sendMessage(jid, { text: body });
+    }
 }
 
 async function cmdDetail(sock, jid, args) {
@@ -163,8 +206,11 @@ async function cmdTambah(sock, jid, args) {
     }
     const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal' });
     const time = getTimeRemaining(deadline);
-    const msg = `✅ *Tugas berhasil ditambahkan!*\n──────────────────\n*Nama:* ${name}\n*Deadline:* ${formatDeadline(deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${detail || '-'}`;
-    await sock.sendMessage(jid, { text: msg });
+    const body = `✅ *Tugas berhasil ditambahkan!*\n──────────────────\n*Nama:* ${name}\n*Deadline:* ${formatDeadline(deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${detail || '-'}`;
+    await sendButtons(sock, jid, body, [
+        { id: 'btn_list', displayText: '📋 Lihat Daftar' },
+        { id: 'btn_stats', displayText: '📊 Statistik' }
+    ], 'RemindMe Bot');
 }
 
 async function cmdSelesai(sock, jid, args) {
@@ -181,7 +227,15 @@ async function cmdSelesai(sock, jid, args) {
     }
     await Task.findByIdAndUpdate(task._id, { status: 'completed', completedAt: new Date() });
     const remaining = tasks.length - 1;
-    await sock.sendMessage(jid, { text: `🎉 *${task.name}* telah diselesaikan!\n\n⏳ Sisa tugas aktif: ${remaining}` });
+    await sendButtons(sock, jid,
+        `🎉 *${task.name}* telah diselesaikan!\n\n⏳ Sisa tugas aktif: ${remaining}`,
+        [
+            { id: 'btn_list', displayText: '📋 Lihat Daftar' },
+            { id: 'btn_stats', displayText: '📊 Statistik' },
+            { id: 'btn_menu', displayText: '📋 Menu' }
+        ],
+        'RemindMe Bot'
+    );
 }
 
 async function cmdHapus(sock, jid, args) {
@@ -197,7 +251,14 @@ async function cmdHapus(sock, jid, args) {
         return;
     }
     await Task.findByIdAndDelete(task._id);
-    await sock.sendMessage(jid, { text: `🗑️ *${task.name}* telah dihapus.` });
+    await sendButtons(sock, jid,
+        `🗑️ *${task.name}* telah dihapus.`,
+        [
+            { id: 'btn_list', displayText: '📋 Lihat Daftar' },
+            { id: 'btn_menu', displayText: '📋 Menu' }
+        ],
+        'RemindMe Bot'
+    );
 }
 
 async function cmdStats(sock, jid) {
@@ -380,6 +441,27 @@ function setupChangeStream() {
 }
 
 // ═══════════════════════════════════════
+// BUTTON ID → COMMAND MAPPING
+// ═══════════════════════════════════════
+
+function mapButtonToCommand(btnId) {
+    const map = {
+        'btn_menu': '!menu',
+        'btn_list': '!list',
+        'btn_stats': '!stats',
+        'btn_info': '!info',
+        'btn_setgrup': '!setgrup',
+    };
+    if (map[btnId]) return map[btnId];
+
+    // Dynamic buttons: btn_detail_1 → !detail 1, btn_selesai_2 → !selesai 2
+    const match = btnId.match(/^btn_(detail|selesai|hapus)_(\d+)$/);
+    if (match) return `!${match[1]} ${match[2]}`;
+
+    return '';
+}
+
+// ═══════════════════════════════════════
 // WHATSAPP BOT
 // ═══════════════════════════════════════
 
@@ -431,7 +513,24 @@ async function startBot() {
             if (!msg.message || msg.key.fromMe) return;
 
             const jid = msg.key.remoteJid;
-            const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
+
+            // Handle interactive button responses
+            const btnResponse = msg.message.buttonsResponseMessage?.selectedButtonId
+                || msg.message.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+            const listResponse = msg.message.listResponseMessage?.singleSelectReply?.selectedRowId;
+
+            let text = '';
+            if (btnResponse) {
+                let btnId = btnResponse;
+                // Parse native flow JSON if needed
+                try { const parsed = JSON.parse(btnId); btnId = parsed.id || btnId; } catch (_) {}
+                // Map button IDs to commands
+                text = mapButtonToCommand(btnId);
+            } else if (listResponse) {
+                text = mapButtonToCommand(listResponse);
+            } else {
+                text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim();
+            }
 
             if (!text.startsWith('!')) return;
 
