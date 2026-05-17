@@ -519,11 +519,6 @@ async function startBot() {
                 globalSock = sock;
                 isReconnecting = false;
                 setupChangeStream();
-
-                setTimeout(async () => {
-                    try { await broadcastReminder(sock, null, 'critical'); }
-                    catch (e) { console.error('❌ Cek awal gagal:', e.message); }
-                }, 3000);
             }
         });
 
