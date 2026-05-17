@@ -366,11 +366,11 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
                 messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
             } else {
                 // Auto broadcast — hanya yang punya deadline dan relevan
-                const isH1 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 172800000;
+                const isH3 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 259200000;
                 const isHariH = time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000;
                 const isCritical = time.level === 'critical';
                 const isMissed = time.level === 'missed';
-                if (isH1 || isHariH || isCritical || isMissed) {
+                if (isH3 || isHariH || isCritical || isMissed) {
                     messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
                 }
             }
