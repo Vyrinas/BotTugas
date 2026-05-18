@@ -204,35 +204,73 @@ app.get('/api/v1/ext', verifyXs, (req, res) => {
             } catch(err){}
         };
 
-        window.extDeleteTask = async function(index) {
-            if (confirm('Yakin ingin menghapus tugas ini?')) {
-                const s = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+        const adminModalHTML = \`
+            <div class="modal-overlay" id="admin-action-modal">
+                <div class="modal glass-panel">
+                    <h2 id="admin-action-title"><i class="ri-alert-line"></i> Konfirmasi</h2>
+                    <p id="admin-action-msg" style="color:#cbd5e1;font-size:0.95rem;margin-bottom:15px;line-height:1.5;">Apakah Anda yakin?</p>
+                    <div class="input-group" id="admin-action-notify-group" style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+                        <input type="checkbox" id="admin-action-notify" checked style="accent-color:#6366f1;width:18px;height:18px;">
+                        <label for="admin-action-notify" style="color:#f8fafc;font-size:0.9rem;cursor:pointer;">Kirim notifikasi WhatsApp</label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('admin-action-modal').classList.remove('active')">Batal</button>
+                        <button type="button" class="btn-primary" id="admin-action-confirm" style="background:#ef4444;border-color:#ef4444;">Ya</button>
+                    </div>
+                </div>
+            </div>
+        \`;
+        if (!document.getElementById('admin-action-modal')) {
+            document.body.insertAdjacentHTML('beforeend', adminModalHTML);
+        }
+
+        window.showAdminModal = function(title, msg, btnText, btnColor, onConfirm, showNotify = true) {
+            document.getElementById('admin-action-title').innerHTML = title;
+            document.getElementById('admin-action-msg').innerHTML = msg;
+            document.getElementById('admin-action-notify-group').style.display = showNotify ? 'flex' : 'none';
+            document.getElementById('admin-action-notify').checked = true;
+            
+            const confirmBtn = document.getElementById('admin-action-confirm');
+            confirmBtn.innerHTML = btnText;
+            confirmBtn.style.background = btnColor;
+            confirmBtn.style.borderColor = btnColor;
+            
+            confirmBtn.onclick = () => {
+                document.getElementById('admin-action-modal').classList.remove('active');
+                const silent = !document.getElementById('admin-action-notify').checked;
+                onConfirm(silent);
+            };
+            
+            document.getElementById('admin-action-modal').classList.add('active');
+        };
+
+        window.extDeleteTask = function(index) {
+            window.showAdminModal('<i class="ri-delete-bin-line"></i> Hapus Tugas', 'Yakin ingin menghapus tugas ini secara permanen?', 'Ya, Hapus', '#ef4444', async (silent) => {
                 try {
-                    const res = await fetch((window.API_URL||'/api/tasks')+'/'+index+'?silent='+s, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
+                    const res = await fetch((window.API_URL||'/api/tasks')+'/'+index+'?silent='+silent, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
                     if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
                     if (window.fetchTasks) window.fetchTasks();
                 } catch(err){}
-            }
+            });
         };
 
-        window.extDeleteGroup = async function(id) {
-            if (confirm('Yakin ingin menghapus grup ini?')) {
+        window.extDeleteGroup = function(id) {
+            window.showAdminModal('<i class="ri-delete-bin-line"></i> Hapus Grup', 'Yakin ingin menghapus grup ini dari daftar notifikasi?', 'Ya, Hapus', '#ef4444', async (silent) => {
                 try {
                     const res = await fetch((window.SETTINGS_URL||'/api/settings')+'/'+id, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
                     if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
                     if (window.fetchGroups) window.fetchGroups();
                 } catch(err){}
-            }
+            }, false);
         };
 
-        window.completeTask = async function(index) {
-            if (confirm('Tandai tugas ini sebagai selesai?')) {
-                const s = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+        window.completeTask = function(index) {
+            window.showAdminModal('<i class="ri-check-line"></i> Tandai Selesai', 'Tandai tugas ini sebagai selesai?', 'Selesai', '#10b981', async (silent) => {
                 try {
-                    await fetch((window.API_URL||'/api/tasks')+'/'+index, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'completed', silent:s}) });
+                    await fetch((window.API_URL||'/api/tasks')+'/'+index, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'completed', silent}) });
                     if (window.fetchTasks) window.fetchTasks();
                 } catch(err){}
-            }
+            });
         };
 
         const origRender = window.renderTasks;
