@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const { connectDB, Task, Setting } = require('./database');
 
 const app = express();
@@ -43,25 +44,84 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// --- ADMIN AUTH ---
+// --- ADMIN AUTH (Hardened) ---
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'rahasia123';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin-secret-token';
+const TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 jam
+
+// Session store: { token: { createdAt, ip } }
+const activeSessions = new Map();
+
+// Rate limiter store: { ip: { count, resetAt } }
+const loginAttempts = new Map();
+const MAX_ATTEMPTS = 5;
+const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 menit
+
+// Bersihkan session & rate limiter yang sudah expired setiap 10 menit
+setInterval(() => {
+    const now = Date.now();
+    for (const [token, session] of activeSessions) {
+        if (now - session.createdAt > TOKEN_EXPIRY_MS) activeSessions.delete(token);
+    }
+    for (const [ip, data] of loginAttempts) {
+        if (now > data.resetAt) loginAttempts.delete(ip);
+    }
+}, 10 * 60 * 1000);
+
+// Timing-safe comparison to prevent timing attacks
+function safeCompare(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+}
 
 app.post('/api/login', (req, res) => {
-    if (req.body.password === ADMIN_PASSWORD) {
-        res.json({ token: ADMIN_TOKEN });
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    const now = Date.now();
+
+    // Rate limit check
+    const attempts = loginAttempts.get(ip);
+    if (attempts && now < attempts.resetAt && attempts.count >= MAX_ATTEMPTS) {
+        const waitSec = Math.ceil((attempts.resetAt - now) / 1000);
+        return res.status(429).json({ error: `Terlalu banyak percobaan. Coba lagi dalam ${waitSec} detik.` });
+    }
+
+    const password = req.body.password || '';
+    if (safeCompare(password, ADMIN_PASSWORD)) {
+        // Reset rate limiter on success
+        loginAttempts.delete(ip);
+
+        // Generate random session token
+        const token = crypto.randomBytes(32).toString('hex');
+        activeSessions.set(token, { createdAt: now, ip });
+        res.json({ token });
     } else {
-        res.status(401).json({ error: 'Password salah' });
+        // Increment rate limiter
+        if (!attempts || now > attempts.resetAt) {
+            loginAttempts.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+        } else {
+            attempts.count++;
+        }
+        const remaining = MAX_ATTEMPTS - (loginAttempts.get(ip)?.count || 0);
+        res.status(401).json({ error: `Password salah. Sisa percobaan: ${remaining}` });
     }
 });
 
 const requireAdmin = (req, res, next) => {
     const token = req.headers['x-admin-token'];
-    if (token === ADMIN_TOKEN) {
-        next();
-    } else {
-        res.status(401).json({ error: 'Akses ditolak. Anda bukan admin.' });
+    if (!token) return res.status(401).json({ error: 'Akses ditolak.' });
+
+    const session = activeSessions.get(token);
+    if (!session) return res.status(401).json({ error: 'Token tidak valid atau sudah kedaluwarsa.' });
+
+    // Check expiry
+    if (Date.now() - session.createdAt > TOKEN_EXPIRY_MS) {
+        activeSessions.delete(token);
+        return res.status(401).json({ error: 'Sesi sudah kedaluwarsa. Silakan login ulang.' });
     }
+
+    next();
 };
 
 // --- TASKS ---
