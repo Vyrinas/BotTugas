@@ -145,6 +145,9 @@ app.get('/api/v1/ext', verifyXs, (req, res) => {
                         if (window.renderTasks) window.renderTasks(); // Trigger injecting delete buttons
                     }
                 }
+                if (window.renderGroupCheckboxes) {
+                    window.renderGroupCheckboxes('add-group-checkboxes', window.cachedGroups.map(g=>g.reminderJid));
+                }
             } catch(e) {}
         };
 
@@ -312,6 +315,7 @@ app.get('/api/v1/ext', verifyXs, (req, res) => {
         };
 
         // Initial trigger
+        if (window.fetchGroups) window.fetchGroups();
         if (window.renderTasks) window.renderTasks();
     `;
     res.type('application/javascript');
