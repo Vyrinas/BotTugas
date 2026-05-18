@@ -94,7 +94,7 @@ app.post('/api/v1/sync', (req, res) => {
         // Generate random session token
         const token = crypto.randomBytes(32).toString('hex');
         activeSessions.set(token, { createdAt: now, ip });
-        res.json({ token });
+        res.json({ t: token });
     } else {
         // Increment rate limiter
         if (!attempts || now > attempts.resetAt) {
