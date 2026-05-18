@@ -125,6 +125,54 @@ const verifyXs = (req, res, next) => {
 
 app.get('/api/v1/ext', verifyXs, (req, res) => {
     const extCode = `
+        window.cachedGroups = [];
+        
+        window.fetchGroups = async function() {
+            try {
+                const res = await fetch(window.SETTINGS_URL || '/api/settings');
+                window.cachedGroups = await res.json();
+                
+                const groupList = document.getElementById('group-list');
+                if (groupList) {
+                    if (window.cachedGroups.length === 0) {
+                        groupList.innerHTML = '<div class="empty-state"><i class="ri-ghost-line"></i><p>Belum ada grup yang terhubung.</p></div>';
+                    } else {
+                        groupList.innerHTML = window.cachedGroups.map((g, i) => 
+                            '<li class="task-item" data-index="'+i+'"><div class="task-info"><span class="task-name">'+
+                            (g.groupName ? window.esc(g.groupName) : g.reminderJid)+
+                            '</span></div><div class="task-actions"></div></li>'
+                        ).join('');
+                        if (window.renderTasks) window.renderTasks(); // Trigger injecting delete buttons
+                    }
+                }
+            } catch(e) {}
+        };
+
+        window.renderGroupCheckboxes = function(containerId, checkedJids) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            if (!window.cachedGroups || window.cachedGroups.length === 0) {
+                container.innerHTML = '<p style="color:#64748b;font-size:0.8rem;margin:0;">Tidak ada grup yang tersedia.</p>';
+                return;
+            }
+            container.innerHTML = window.cachedGroups.map(g => {
+                const isChecked = checkedJids.includes(g.reminderJid) ? 'checked' : '';
+                return '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;color:#f8fafc;cursor:pointer;"><input type="checkbox" value="'+g.reminderJid+'" '+isChecked+' style="accent-color:#6366f1;"> '+(g.groupName ? window.esc(g.groupName) : g.reminderJid)+'</label>';
+            }).join('');
+        };
+
+        window.getSelectedGroups = function(containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return [];
+            return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+        };
+
+        // Un-hide the group tab
+        const settingsTabBtn = document.querySelector('.tab-btn[data-target="settings"]');
+        if (settingsTabBtn) {
+            settingsTabBtn.style.display = 'inline-flex';
+        }
+
         window.extSubmitAdd = async function(e) {
             const name = document.getElementById('task-name').value;
             const date = document.getElementById('task-date').value;
