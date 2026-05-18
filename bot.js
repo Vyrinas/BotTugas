@@ -340,7 +340,7 @@ async function cmdInfo(sock, jid) {
 // ═══════════════════════════════════════
 
 async function broadcastReminder(sock, targetJid, mode = 'all') {
-    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const tasks = await Task.find({ status: { $nin: ['completed', 'deleted'] } }).sort({ createdAt: 1 });
     if (tasks.length === 0 && targetJid) {
         await sock.sendMessage(targetJid, { text: '✨ Tidak ada tugas aktif.' });
         return;
@@ -434,8 +434,10 @@ function setupChangeStream() {
             const t = change.fullDocument;
             const updatedFields = change.updateDescription?.updatedFields || {};
 
-            if (updatedFields.status === 'completed') {
+            if (updatedFields.status === 'completed' && !t.silent) {
                 msg = `✅ *Tugas Diselesaikan*\n──────────────────\n*${t.name}* telah ditandai selesai! 🎉`;
+            } else if (updatedFields.status === 'deleted') {
+                return; // Silent soft delete, ignore in stream
             } else if (!updatedFields.status && Object.keys(updatedFields).length > 0 && !t.silent) {
                 const time = getTimeRemaining(t.deadline);
                 msg = `✏️ *Tugas Diedit*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal').charAt(0).toUpperCase() + (t.priority || 'normal').slice(1)}`;

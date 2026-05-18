@@ -26,7 +26,7 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 // --- STATS ---
 app.get('/api/stats', async (req, res) => {
     try {
-        const all = await Task.find();
+        const all = await Task.find({ status: { $ne: 'deleted' } });
         const completed = all.filter(t => t.status === 'completed').length;
         const pending = all.filter(t => t.status !== 'completed').length;
         const missed = all.filter(t => {
@@ -127,7 +127,7 @@ const requireAdmin = (req, res, next) => {
 // --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
     try {
-        const tasks = await Task.find().sort({ createdAt: 1 });
+        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ error: 'Gagal mengambil data' });
@@ -156,7 +156,7 @@ app.post('/api/tasks', async (req, res) => {
 app.put('/api/tasks/:id', async (req, res) => {
     const { name, date, detail, priority, silent } = req.body;
     try {
-        const tasks = await Task.find().sort({ createdAt: 1 });
+        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
             await Task.findByIdAndUpdate(tasks[id]._id, {
@@ -176,12 +176,13 @@ app.put('/api/tasks/:id', async (req, res) => {
 });
 
 app.patch('/api/tasks/:id', async (req, res) => {
-    const { status } = req.body;
+    const { status, silent } = req.body;
     try {
-        const tasks = await Task.find().sort({ createdAt: 1 });
+        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
             const update = { status };
+            if (silent !== undefined) update.silent = silent;
             if (status === 'completed') update.completedAt = new Date();
             await Task.findByIdAndUpdate(tasks[id]._id, update);
             res.json({ message: 'Status diupdate' });
@@ -195,10 +196,15 @@ app.patch('/api/tasks/:id', async (req, res) => {
 
 app.delete('/api/tasks/:id', requireAdmin, async (req, res) => {
     try {
-        const tasks = await Task.find().sort({ createdAt: 1 });
+        const silent = req.query.silent === 'true';
+        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
-            await Task.findByIdAndDelete(tasks[id]._id);
+            if (silent) {
+                await Task.findByIdAndUpdate(tasks[id]._id, { status: 'deleted', silent: true });
+            } else {
+                await Task.findByIdAndDelete(tasks[id]._id);
+            }
             res.json({ message: 'Dihapus' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });

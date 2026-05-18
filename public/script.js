@@ -28,22 +28,31 @@ document.addEventListener('DOMContentLoaded', () => {
             clearTimeout(clickTimer);
             if (clickCount >= 5) {
                 clickCount = 0;
-                const pwd = prompt('Admin Password:');
-                if (pwd) {
-                    fetch('/api/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: pwd })
-                    }).then(res => res.json()).then(data => {
-                        if (data.token) {
-                            localStorage.setItem('adminToken', data.token);
-                            alert('Admin mode diaktifkan!');
-                            renderTasks();
-                            if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
-                        } else {
-                            alert('Password salah!');
-                        }
-                    }).catch(() => alert('Error login'));
+                if (localStorage.getItem('adminToken')) {
+                    if (confirm('Anda sudah login sebagai Admin. Ingin logout?')) {
+                        localStorage.removeItem('adminToken');
+                        alert('Berhasil logout.');
+                        renderTasks();
+                        if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
+                    }
+                } else {
+                    const pwd = prompt('Admin Password:');
+                    if (pwd) {
+                        fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ password: pwd })
+                        }).then(res => res.json()).then(data => {
+                            if (data.token) {
+                                localStorage.setItem('adminToken', data.token);
+                                alert('Admin mode diaktifkan!');
+                                renderTasks();
+                                if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
+                            } else {
+                                alert('Password salah!');
+                            }
+                        }).catch(() => alert('Error login'));
+                    }
                 }
             } else {
                 clickTimer = setTimeout(() => { clickCount = 0; }, 1500);
@@ -151,6 +160,8 @@ function priorityBadge(p) {
 // Render Tasks
 function renderTasks() {
     const isAdmin = !!localStorage.getItem('adminToken');
+    document.querySelectorAll('.notify-wrapper').forEach(w => w.style.display = isAdmin ? 'flex' : 'none');
+    
     const pendingTasks = tasks.filter(t => t.status !== 'completed');
     const compTasks = tasks.filter(t => t.status === 'completed');
 
@@ -235,21 +246,31 @@ function renderTasks() {
 
 // Complete Task
 async function completeTask(index) {
-    try {
-        await fetch(`${API_URL}/${index}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'completed' })
-        });
-        fetchTasks();
-    } catch (error) { console.error('Error:', error); }
+    if (confirm('Tandai tugas ini sebagai selesai?')) {
+        let silent = false;
+        if (!!localStorage.getItem('adminToken')) {
+            silent = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+        }
+        try {
+            await fetch(`${API_URL}/${index}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'completed', silent })
+            });
+            fetchTasks();
+        } catch (error) { console.error('Error:', error); }
+    }
 }
 
 // Delete Task
 async function deleteTask(index) {
     if (confirm('Yakin ingin menghapus tugas ini?')) {
+        let silent = false;
+        if (!!localStorage.getItem('adminToken')) {
+            silent = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+        }
         try {
-            const res = await fetch(`${API_URL}/${index}`, { 
+            const res = await fetch(`${API_URL}/${index}?silent=${silent}`, { 
                 method: 'DELETE',
                 headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
             });
