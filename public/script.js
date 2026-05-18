@@ -1,7 +1,15 @@
 const API_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/tasks' : '/api/tasks';
 const STATS_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/stats' : '/api/stats';
+const SETTINGS_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/settings' : '/api/settings';
 
 let tasks = [];
+let cachedGroups = [];
+
+// XSS Protection
+function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
 
 // DOM Elements
 const taskForm = document.getElementById('task-form');
@@ -17,6 +25,7 @@ const editForm = document.getElementById('edit-form');
 document.addEventListener('DOMContentLoaded', () => {
     fetchTasks();
     fetchStats();
+    loadGroups();
     
     // Hidden Admin Login Trigger (Click logo 5 times quickly)
     let clickCount = 0;
@@ -33,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         localStorage.removeItem('adminToken');
                         alert('Berhasil logout.');
                         renderTasks();
+                        updateNotifyUI();
                         if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
                     }
                 } else {
@@ -47,9 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 localStorage.setItem('adminToken', data.token);
                                 alert('Admin mode diaktifkan!');
                                 renderTasks();
+                                updateNotifyUI();
                                 if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
                             } else {
-                                alert('Password salah!');
+                                alert(data.error || 'Password salah!');
                             }
                         }).catch(() => alert('Error login'));
                     }
@@ -91,6 +102,51 @@ async function fetchStats() {
     }
 }
 
+// Load groups for checkbox selectors
+async function loadGroups() {
+    try {
+        const res = await fetch(SETTINGS_URL);
+        cachedGroups = await res.json();
+        updateNotifyUI();
+    } catch (e) { cachedGroups = []; }
+}
+
+// Render group checkboxes into a container
+function renderGroupCheckboxes(containerId, selectedJids) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (cachedGroups.length === 0) {
+        container.innerHTML = '<span style="color:#64748b; font-size:0.8rem;">Belum ada grup terhubung.</span>';
+        return;
+    }
+    container.innerHTML = cachedGroups.map(g => {
+        const checked = selectedJids.includes(g.reminderJid) ? 'checked' : '';
+        const shortName = g.reminderJid.replace(/@.*/, '');
+        return `<label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.88rem;cursor:pointer;">
+            <input type="checkbox" value="${esc(g.reminderJid)}" ${checked} style="width:auto;padding:0;margin:0;cursor:pointer;" class="group-cb">
+            ${esc(shortName)}
+        </label>`;
+    }).join('');
+}
+
+// Get selected group JIDs from a container
+function getSelectedGroups(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('.group-cb:checked')).map(cb => cb.value);
+}
+
+// Show/hide notify wrappers based on admin status, populate add-form checkboxes
+function updateNotifyUI() {
+    const isAdmin = !!localStorage.getItem('adminToken');
+    document.querySelectorAll('.notify-wrapper').forEach(w => w.style.display = isAdmin ? 'block' : 'none');
+    if (isAdmin) {
+        // Default: all groups checked for new tasks
+        const allJids = cachedGroups.map(g => g.reminderJid);
+        renderGroupCheckboxes('add-group-checkboxes', allJids);
+    }
+}
+
 // Fetch Tasks
 async function fetchTasks() {
     try {
@@ -111,17 +167,32 @@ taskForm.addEventListener('submit', async (e) => {
     const date = document.getElementById('task-date').value;
     const detail = document.getElementById('task-detail').value;
     const priority = document.getElementById('task-priority').value;
-    const notify = document.getElementById('task-notify').checked;
+    
+    const isAdmin = !!localStorage.getItem('adminToken');
+    let targetGroups = [];
+    let silent = false;
+    
+    if (isAdmin) {
+        targetGroups = getSelectedGroups('add-group-checkboxes');
+        silent = targetGroups.length === 0;
+    } else {
+        // Non-admin: send to all groups (default behavior)
+        targetGroups = cachedGroups.map(g => g.reminderJid);
+        silent = false;
+    }
 
     try {
         await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, silent: !notify })
+            body: JSON.stringify({ name, date, detail, priority, silent, targetGroups })
         });
         taskForm.reset();
         document.getElementById('task-priority').value = 'normal';
-        document.getElementById('task-notify').checked = true;
+        if (isAdmin) {
+            const allJids = cachedGroups.map(g => g.reminderJid);
+            renderGroupCheckboxes('add-group-checkboxes', allJids);
+        }
         fetchTasks();
     } catch (error) {
         console.error('Error adding task:', error);
@@ -160,7 +231,7 @@ function priorityBadge(p) {
 // Render Tasks
 function renderTasks() {
     const isAdmin = !!localStorage.getItem('adminToken');
-    document.querySelectorAll('.notify-wrapper').forEach(w => w.style.display = isAdmin ? 'flex' : 'none');
+    updateNotifyUI();
     
     const pendingTasks = tasks.filter(t => t.status !== 'completed');
     const compTasks = tasks.filter(t => t.status === 'completed');
@@ -183,14 +254,14 @@ function renderTasks() {
                 }
             }
 
-            const detailHtml = task.detail ? `<div class="task-detail">${task.detail}</div>` : '';
+            const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             const pBadge = priorityBadge(task.priority);
 
             return `
                 <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}">
                     <div class="task-info">
                         <div class="task-name-row">
-                            <span class="task-name">${task.name}</span>
+                            <span class="task-name">${esc(task.name)}</span>
                             ${pBadge}
                         </div>
                         ${detailHtml}
@@ -220,17 +291,17 @@ function renderTasks() {
     } else {
         completedList.innerHTML = compTasks.map((task) => {
             const realIndex = tasks.findIndex(t => t === task);
-            const detailHtml = task.detail ? `<div class="task-detail">${task.detail}</div>` : '';
+            const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             const completedDate = task.completedAt
                 ? new Date(task.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : '';
             return `
                 <li class="task-item completed">
                     <div class="task-info">
-                        <span class="task-name">${task.name}</span>
+                        <span class="task-name">${esc(task.name)}</span>
                         ${detailHtml}
                         <div class="task-date">
-                            <i class="ri-check-double-line"></i> Selesai${completedDate ? ' — ' + completedDate : ''}
+                            <i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}
                         </div>
                     </div>
                     <div class="task-actions">
@@ -293,6 +364,16 @@ function openEditModal(index) {
     document.getElementById('edit-date').value = task.date || task.deadline || '';
     document.getElementById('edit-detail').value = task.detail || '';
     document.getElementById('edit-priority').value = task.priority || 'normal';
+    
+    // Populate group checkboxes with task's current targetGroups
+    const isAdmin = !!localStorage.getItem('adminToken');
+    if (isAdmin) {
+        const taskGroups = task.targetGroups && task.targetGroups.length > 0
+            ? task.targetGroups
+            : cachedGroups.map(g => g.reminderJid); // Default: all groups for old tasks
+        renderGroupCheckboxes('edit-group-checkboxes', taskGroups);
+    }
+    
     editModal.classList.add('active');
 }
 
@@ -307,13 +388,28 @@ editForm.addEventListener('submit', async (e) => {
     const date = document.getElementById('edit-date').value;
     const detail = document.getElementById('edit-detail').value;
     const priority = document.getElementById('edit-priority').value;
-    const notify = document.getElementById('edit-notify').checked;
+    
+    const isAdmin = !!localStorage.getItem('adminToken');
+    let targetGroups;
+    let silent;
+    
+    if (isAdmin) {
+        targetGroups = getSelectedGroups('edit-group-checkboxes');
+        silent = targetGroups.length === 0;
+    } else {
+        // Non-admin doesn't change targetGroups
+        targetGroups = undefined;
+        silent = false;
+    }
 
     try {
+        const body = { name, date, detail, priority, silent };
+        if (targetGroups !== undefined) body.targetGroups = targetGroups;
+        
         await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, silent: !notify })
+            body: JSON.stringify(body)
         });
         closeModal();
         fetchTasks();
@@ -323,8 +419,9 @@ editForm.addEventListener('submit', async (e) => {
 // --- GROUP MANAGEMENT ---
 async function fetchGroups() {
     try {
-        const response = await fetch('/api/settings');
+        const response = await fetch(SETTINGS_URL);
         const groups = await response.json();
+        cachedGroups = groups;
         renderGroups(groups);
     } catch (error) {
         groupList.innerHTML = `<div class="empty-state"><i class="ri-error-warning-line"></i><p>Gagal memuat daftar grup.</p></div>`;
@@ -340,12 +437,12 @@ function renderGroups(groups) {
     groupList.innerHTML = groups.map(group => `
         <li class="task-item">
             <div class="task-info">
-                <span class="task-name">${group.reminderJid}</span>
+                <span class="task-name">${esc(group.reminderJid)}</span>
                 <div class="task-date"><i class="ri-checkbox-circle-line"></i> Status: Aktif</div>
             </div>
             <div class="task-actions">
                 ${isAdmin ? `
-                <button class="action-btn btn-delete" onclick="deleteGroup('${group._id}')" title="Hapus Grup">
+                <button class="action-btn btn-delete" onclick="deleteGroup('${esc(group._id)}')" title="Hapus Grup">
                     <i class="ri-delete-bin-line"></i>
                 </button>` : ''}
             </div>
@@ -355,7 +452,7 @@ function renderGroups(groups) {
 async function deleteGroup(id) {
     if (confirm('Yakin ingin menghapus grup ini dari daftar pengingat?')) {
         try {
-            const res = await fetch(`/api/settings/${id}`, { 
+            const res = await fetch(`${SETTINGS_URL}/${id}`, { 
                 method: 'DELETE',
                 headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
             });
@@ -366,6 +463,7 @@ async function deleteGroup(id) {
                 return;
             }
             fetchGroups();
+            loadGroups(); // Refresh cached groups for checkboxes
         } catch (error) { console.error('Error deleting group:', error); }
     }
 }

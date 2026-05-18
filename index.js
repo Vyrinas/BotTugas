@@ -135,7 +135,7 @@ app.get('/api/tasks', async (req, res) => {
 });
 
 app.post('/api/tasks', async (req, res) => {
-    const { name, date, detail, priority, silent } = req.body;
+    const { name, date, detail, priority, silent, targetGroups } = req.body;
     if (!name) return res.status(400).json({ error: 'Nama tugas wajib diisi' });
 
     try {
@@ -145,7 +145,8 @@ app.post('/api/tasks', async (req, res) => {
             detail: detail || '',
             status: 'pending',
             priority: priority || 'normal',
-            silent: silent || false
+            silent: silent || false,
+            targetGroups: Array.isArray(targetGroups) ? targetGroups : []
         });
         res.status(201).json({ message: 'Tugas ditambahkan', task });
     } catch (error) {
@@ -154,18 +155,20 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 app.put('/api/tasks/:id', async (req, res) => {
-    const { name, date, detail, priority, silent } = req.body;
+    const { name, date, detail, priority, silent, targetGroups } = req.body;
     try {
         const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
         if (tasks[id]) {
-            await Task.findByIdAndUpdate(tasks[id]._id, {
+            const updateData = {
                 name,
                 deadline: date || '',
                 detail: detail !== undefined ? detail : tasks[id].detail,
                 priority: priority || tasks[id].priority || 'normal',
                 silent: silent !== undefined ? silent : tasks[id].silent
-            });
+            };
+            if (Array.isArray(targetGroups)) updateData.targetGroups = targetGroups;
+            await Task.findByIdAndUpdate(tasks[id]._id, updateData);
             res.json({ message: 'Tugas diedit' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });

@@ -423,12 +423,14 @@ function setupChangeStream() {
         if (allSettings.length === 0) return;
 
         let msg = null;
+        let taskTargetGroups = null; // null = send to all groups
 
         if (change.operationType === 'insert') {
             const t = change.fullDocument;
             if (!t.silent) {
                 const time = getTimeRemaining(t.deadline);
                 msg = `📥 *Tugas Baru Ditambahkan*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal')}`;
+                if (t.targetGroups && t.targetGroups.length > 0) taskTargetGroups = t.targetGroups;
             }
         } else if (change.operationType === 'update' && change.fullDocument) {
             const t = change.fullDocument;
@@ -436,11 +438,13 @@ function setupChangeStream() {
 
             if (updatedFields.status === 'completed' && !t.silent) {
                 msg = `✅ *Tugas Diselesaikan*\n──────────────────\n*${t.name}* telah ditandai selesai! 🎉`;
+                if (t.targetGroups && t.targetGroups.length > 0) taskTargetGroups = t.targetGroups;
             } else if (updatedFields.status === 'deleted') {
                 return; // Silent soft delete, ignore in stream
             } else if (!updatedFields.status && Object.keys(updatedFields).length > 0 && !t.silent) {
                 const time = getTimeRemaining(t.deadline);
                 msg = `✏️ *Tugas Diedit*\n──────────────────\n*Nama:* ${t.name}\n*Deadline:* ${formatDeadline(t.deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${t.detail || '-'}\n*Prioritas:* ${priorityIcon(t.priority)} ${(t.priority || 'normal').charAt(0).toUpperCase() + (t.priority || 'normal').slice(1)}`;
+                if (t.targetGroups && t.targetGroups.length > 0) taskTargetGroups = t.targetGroups;
             }
         } else if (change.operationType === 'delete') {
             msg = `🗑️ *Tugas Dihapus*\n──────────────────\nSatu tugas telah dihapus dari daftar.`;
@@ -448,6 +452,8 @@ function setupChangeStream() {
 
         if (msg) {
             for (const s of allSettings) {
+                // If task has specific targetGroups, only send to those
+                if (taskTargetGroups && !taskTargetGroups.includes(s.reminderJid)) continue;
                 try { await globalSock.sendMessage(s.reminderJid, { text: msg }); }
                 catch (e) { console.error('❌ Notif gagal:', s.reminderJid); }
             }

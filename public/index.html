@@ -105,11 +105,9 @@
                             </select>
                         </div>
                     </div>
-                    <div class="form-row notify-wrapper" style="margin-top: -4px;">
-                        <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer;">
-                            <input type="checkbox" id="task-notify" checked style="width: auto; padding: 0; margin: 0; cursor: pointer;">
-                            Kirim notifikasi WhatsApp ke grup
-                        </label>
+                    <div class="notify-wrapper" style="margin-top: -4px; display: none;">
+                        <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 6px;"><i class="ri-notification-3-line"></i> Kirim notifikasi ke grup:</p>
+                        <div id="add-group-checkboxes" style="display: flex; flex-direction: column; gap: 4px;"></div>
                     </div>
                     <button type="submit" class="btn-primary">
                         <i class="ri-add-line"></i> Tambah Tugas
@@ -186,11 +184,9 @@
                         </select>
                     </div>
                 </div>
-                <div class="form-row notify-wrapper" style="margin-top: -4px;">
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer;">
-                        <input type="checkbox" id="edit-notify" checked style="width: auto; padding: 0; margin: 0; cursor: pointer;">
-                        Kirim notifikasi WhatsApp ke grup
-                    </label>
+                <div class="notify-wrapper" style="margin-top: -4px; display: none;">
+                    <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 6px;"><i class="ri-notification-3-line"></i> Kirim notifikasi ke grup:</p>
+                    <div id="edit-group-checkboxes" style="display: flex; flex-direction: column; gap: 4px;"></div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>

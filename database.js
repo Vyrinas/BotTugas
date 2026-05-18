@@ -41,7 +41,8 @@ const taskSchema = new mongoose.Schema({
     status: { type: String, default: 'pending' },
     priority: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },
     completedAt: { type: Date, default: null },
-    silent: { type: Boolean, default: false }
+    silent: { type: Boolean, default: false },
+    targetGroups: { type: [String], default: [] }
 }, { timestamps: true });
 
 const settingSchema = new mongoose.Schema({
