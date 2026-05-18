@@ -43,6 +43,27 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
+// --- ADMIN AUTH ---
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'rahasia123';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'admin-secret-token';
+
+app.post('/api/login', (req, res) => {
+    if (req.body.password === ADMIN_PASSWORD) {
+        res.json({ token: ADMIN_TOKEN });
+    } else {
+        res.status(401).json({ error: 'Password salah' });
+    }
+});
+
+const requireAdmin = (req, res, next) => {
+    const token = req.headers['x-admin-token'];
+    if (token === ADMIN_TOKEN) {
+        next();
+    } else {
+        res.status(401).json({ error: 'Akses ditolak. Anda bukan admin.' });
+    }
+};
+
 // --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
     try {
@@ -73,7 +94,7 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 app.put('/api/tasks/:id', async (req, res) => {
-    const { name, date, detail, priority } = req.body;
+    const { name, date, detail, priority, silent } = req.body;
     try {
         const tasks = await Task.find().sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
@@ -82,7 +103,8 @@ app.put('/api/tasks/:id', async (req, res) => {
                 name,
                 deadline: date || '',
                 detail: detail !== undefined ? detail : tasks[id].detail,
-                priority: priority || tasks[id].priority || 'normal'
+                priority: priority || tasks[id].priority || 'normal',
+                silent: silent !== undefined ? silent : tasks[id].silent
             });
             res.json({ message: 'Tugas diedit' });
         } else {
@@ -111,7 +133,7 @@ app.patch('/api/tasks/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/tasks/:id', async (req, res) => {
+app.delete('/api/tasks/:id', requireAdmin, async (req, res) => {
     try {
         const tasks = await Task.find().sort({ createdAt: 1 });
         const id = parseInt(req.params.id);
@@ -136,7 +158,7 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-app.delete('/api/settings/:id', async (req, res) => {
+app.delete('/api/settings/:id', requireAdmin, async (req, res) => {
     try {
         await Setting.findByIdAndDelete(req.params.id);
         res.json({ message: 'Grup berhasil dihapus' });

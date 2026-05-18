@@ -17,6 +17,39 @@ const editForm = document.getElementById('edit-form');
 document.addEventListener('DOMContentLoaded', () => {
     fetchTasks();
     fetchStats();
+    
+    // Hidden Admin Login Trigger (Click logo 5 times quickly)
+    let clickCount = 0;
+    let clickTimer;
+    const logo = document.querySelector('.logo-icon');
+    if (logo) {
+        logo.addEventListener('click', () => {
+            clickCount++;
+            clearTimeout(clickTimer);
+            if (clickCount >= 5) {
+                clickCount = 0;
+                const pwd = prompt('Admin Password:');
+                if (pwd) {
+                    fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: pwd })
+                    }).then(res => res.json()).then(data => {
+                        if (data.token) {
+                            localStorage.setItem('adminToken', data.token);
+                            alert('Admin mode diaktifkan!');
+                            renderTasks();
+                            if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
+                        } else {
+                            alert('Password salah!');
+                        }
+                    }).catch(() => alert('Error login'));
+                }
+            } else {
+                clickTimer = setTimeout(() => { clickCount = 0; }, 1500);
+            }
+        });
+    }
 });
 
 // Tab Switching
@@ -117,6 +150,7 @@ function priorityBadge(p) {
 
 // Render Tasks
 function renderTasks() {
+    const isAdmin = !!localStorage.getItem('adminToken');
     const pendingTasks = tasks.filter(t => t.status !== 'completed');
     const compTasks = tasks.filter(t => t.status === 'completed');
 
@@ -161,9 +195,10 @@ function renderTasks() {
                         <button class="action-btn btn-edit" onclick="openEditModal(${index})" title="Edit">
                             <i class="ri-pencil-line"></i>
                         </button>
+                        ${isAdmin ? `
                         <button class="action-btn btn-delete" onclick="deleteTask(${index})" title="Hapus">
                             <i class="ri-delete-bin-line"></i>
-                        </button>
+                        </button>` : ''}
                     </div>
                 </li>`;
         }).join('');
@@ -188,9 +223,10 @@ function renderTasks() {
                         </div>
                     </div>
                     <div class="task-actions">
+                        ${isAdmin ? `
                         <button class="action-btn btn-delete" onclick="deleteTask(${realIndex})" title="Hapus Permanen">
                             <i class="ri-delete-bin-line"></i>
-                        </button>
+                        </button>` : ''}
                     </div>
                 </li>`;
         }).join('');
@@ -213,7 +249,16 @@ async function completeTask(index) {
 async function deleteTask(index) {
     if (confirm('Yakin ingin menghapus tugas ini?')) {
         try {
-            await fetch(`${API_URL}/${index}`, { method: 'DELETE' });
+            const res = await fetch(`${API_URL}/${index}`, { 
+                method: 'DELETE',
+                headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
+            });
+            if (res.status === 401) {
+                localStorage.removeItem('adminToken');
+                alert('Sesi admin tidak valid atau kedaluwarsa. Silakan login admin kembali.');
+                renderTasks();
+                return;
+            }
             fetchTasks();
         } catch (error) { console.error('Error:', error); }
     }
@@ -241,12 +286,13 @@ editForm.addEventListener('submit', async (e) => {
     const date = document.getElementById('edit-date').value;
     const detail = document.getElementById('edit-detail').value;
     const priority = document.getElementById('edit-priority').value;
+    const notify = document.getElementById('edit-notify').checked;
 
     try {
         await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority })
+            body: JSON.stringify({ name, date, detail, priority, silent: !notify })
         });
         closeModal();
         fetchTasks();
@@ -265,6 +311,7 @@ async function fetchGroups() {
 }
 
 function renderGroups(groups) {
+    const isAdmin = !!localStorage.getItem('adminToken');
     if (groups.length === 0) {
         groupList.innerHTML = `<div class="empty-state"><i class="ri-chat-delete-line"></i><p>Belum ada grup terhubung. Gunakan <b>!setgrup</b> di WhatsApp.</p></div>`;
         return;
@@ -276,9 +323,10 @@ function renderGroups(groups) {
                 <div class="task-date"><i class="ri-checkbox-circle-line"></i> Status: Aktif</div>
             </div>
             <div class="task-actions">
+                ${isAdmin ? `
                 <button class="action-btn btn-delete" onclick="deleteGroup('${group._id}')" title="Hapus Grup">
                     <i class="ri-delete-bin-line"></i>
-                </button>
+                </button>` : ''}
             </div>
         </li>`).join('');
 }
@@ -286,7 +334,16 @@ function renderGroups(groups) {
 async function deleteGroup(id) {
     if (confirm('Yakin ingin menghapus grup ini dari daftar pengingat?')) {
         try {
-            await fetch(`/api/settings/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/settings/${id}`, { 
+                method: 'DELETE',
+                headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
+            });
+            if (res.status === 401) {
+                localStorage.removeItem('adminToken');
+                alert('Sesi admin tidak valid atau kedaluwarsa. Silakan login admin kembali.');
+                fetchGroups();
+                return;
+            }
             fetchGroups();
         } catch (error) { console.error('Error deleting group:', error); }
     }
