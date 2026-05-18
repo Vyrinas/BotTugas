@@ -591,7 +591,18 @@ async function startBot() {
                     case '!info':
                         await cmdInfo(sock, jid); break;
                     case '!setgrup':
-                        await Setting.findOneAndUpdate({ reminderJid: jid }, { reminderJid: jid }, { upsert: true });
+                        let gName = jid;
+                        if (jid.endsWith('@g.us')) {
+                            try {
+                                const metadata = await sock.groupMetadata(jid);
+                                gName = metadata.subject || jid;
+                            } catch (e) { console.error('Gagal ambil nama grup', e); }
+                        }
+                        await Setting.findOneAndUpdate(
+                            { reminderJid: jid },
+                            { reminderJid: jid, groupName: gName },
+                            { upsert: true }
+                        );
                         await sock.sendMessage(jid, { text: '✅ Grup ini akan menerima pengingat otomatis.' });
                         break;
                     case '!hapusgrup':

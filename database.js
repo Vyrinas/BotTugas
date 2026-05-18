@@ -46,7 +46,8 @@ const taskSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const settingSchema = new mongoose.Schema({
-    reminderJid: { type: String, required: true, unique: true }
+    reminderJid: { type: String, required: true, unique: true },
+    groupName: { type: String, default: '' }
 });
 
 const Task = mongoose.model('Task', taskSchema);
