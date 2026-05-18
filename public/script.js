@@ -85,6 +85,7 @@ async function fetchTasks() {
     try {
         const response = await fetch(API_URL);
         tasks = await response.json();
+        window.tasks = tasks;
         if (window.renderTasks) window.renderTasks();
         fetchStats();
     } catch (error) {
