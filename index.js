@@ -76,18 +76,17 @@ function safeCompare(a, b) {
     return crypto.timingSafeEqual(bufA, bufB);
 }
 
-app.post('/api/login', (req, res) => {
+app.post('/api/v1/sync', (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
     const now = Date.now();
 
     // Rate limit check
     const attempts = loginAttempts.get(ip);
     if (attempts && now < attempts.resetAt && attempts.count >= MAX_ATTEMPTS) {
-        const waitSec = Math.ceil((attempts.resetAt - now) / 1000);
-        return res.status(429).json({ error: `Terlalu banyak percobaan. Coba lagi dalam ${waitSec} detik.` });
+        return res.status(429).json({ error: 'x' });
     }
 
-    const password = req.body.password || '';
+    const password = req.body.k || '';
     if (safeCompare(password, ADMIN_PASSWORD)) {
         // Reset rate limiter on success
         loginAttempts.delete(ip);
@@ -104,13 +103,13 @@ app.post('/api/login', (req, res) => {
             attempts.count++;
         }
         const remaining = MAX_ATTEMPTS - (loginAttempts.get(ip)?.count || 0);
-        res.status(401).json({ error: `Password salah. Sisa percobaan: ${remaining}` });
+        res.status(401).json({ error: 'x' });
     }
 });
 
-const requireAdmin = (req, res, next) => {
-    const token = req.headers['x-admin-token'];
-    if (!token) return res.status(401).json({ error: 'Akses ditolak.' });
+const verifyXs = (req, res, next) => {
+    const token = req.headers['x-xs-token'];
+    if (!token) return res.status(401).json({ error: 'x' });
 
     const session = activeSessions.get(token);
     if (!session) return res.status(401).json({ error: 'Token tidak valid atau sudah kedaluwarsa.' });
@@ -118,11 +117,159 @@ const requireAdmin = (req, res, next) => {
     // Check expiry
     if (Date.now() - session.createdAt > TOKEN_EXPIRY_MS) {
         activeSessions.delete(token);
-        return res.status(401).json({ error: 'Sesi sudah kedaluwarsa. Silakan login ulang.' });
+        return res.status(401).json({ error: 'x' });
     }
 
     next();
 };
+
+app.get('/api/v1/ext', verifyXs, (req, res) => {
+    const extCode = `
+        window.extSubmitAdd = async function(e) {
+            const name = document.getElementById('task-name').value;
+            const date = document.getElementById('task-date').value;
+            const detail = document.getElementById('task-detail').value;
+            const priority = document.getElementById('task-priority').value;
+            const tgs = window.getSelectedGroups ? window.getSelectedGroups('add-group-checkboxes') : [];
+            try {
+                await fetch(window.API_URL || '/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, date, detail, priority, targetGroups: tgs, silent: tgs.length===0}) });
+                document.getElementById('task-form').reset();
+                if (window.fetchTasks) window.fetchTasks();
+                if (window.renderGroupCheckboxes && window.cachedGroups) window.renderGroupCheckboxes('add-group-checkboxes', window.cachedGroups.map(g=>g.reminderJid));
+            } catch(err){}
+        };
+
+        window.extSubmitEdit = async function(e) {
+            const id = document.getElementById('edit-id').value;
+            const name = document.getElementById('edit-name').value;
+            const date = document.getElementById('edit-date').value;
+            const detail = document.getElementById('edit-detail').value;
+            const priority = document.getElementById('edit-priority').value;
+            const tgs = window.getSelectedGroups ? window.getSelectedGroups('edit-group-checkboxes') : [];
+            try {
+                await fetch((window.API_URL||'/api/tasks')+'/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name, date, detail, priority, targetGroups: tgs, silent: tgs.length===0}) });
+                if (window.closeModal) window.closeModal();
+                if (window.fetchTasks) window.fetchTasks();
+            } catch(err){}
+        };
+
+        window.extDeleteTask = async function(index) {
+            if (confirm('Yakin ingin menghapus tugas ini?')) {
+                const s = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+                try {
+                    const res = await fetch((window.API_URL||'/api/tasks')+'/'+index+'?silent='+s, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
+                    if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
+                    if (window.fetchTasks) window.fetchTasks();
+                } catch(err){}
+            }
+        };
+
+        window.extDeleteGroup = async function(id) {
+            if (confirm('Yakin ingin menghapus grup ini?')) {
+                try {
+                    const res = await fetch((window.SETTINGS_URL||'/api/settings')+'/'+id, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
+                    if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
+                    if (window.fetchGroups) window.fetchGroups();
+                } catch(err){}
+            }
+        };
+
+        window.completeTask = async function(index) {
+            if (confirm('Tandai tugas ini sebagai selesai?')) {
+                const s = !confirm('Kirim notifikasi ke WhatsApp? (OK = Ya, Batal = Tidak/Silent)');
+                try {
+                    await fetch((window.API_URL||'/api/tasks')+'/'+index, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'completed', silent:s}) });
+                    if (window.fetchTasks) window.fetchTasks();
+                } catch(err){}
+            }
+        };
+
+        const origRender = window.renderTasks;
+        window.renderTasks = function() {
+            if (origRender) origRender();
+            
+            // Inject add form checkboxes
+            const addForm = document.getElementById('task-form');
+            if (addForm && !document.getElementById('add-group-checkboxes')) {
+                const btn = addForm.querySelector('.btn-primary');
+                if (btn) {
+                    const div = document.createElement('div');
+                    div.style.marginTop = '-4px'; div.style.marginBottom = '12px';
+                    div.innerHTML = '<p style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;"><i class="ri-notification-3-line"></i> Kirim notif ke grup:</p><div id="add-group-checkboxes" style="display:flex;flex-direction:column;gap:4px;"></div>';
+                    addForm.insertBefore(div, btn);
+                    if (window.cachedGroups && window.renderGroupCheckboxes) window.renderGroupCheckboxes('add-group-checkboxes', window.cachedGroups.map(g=>g.reminderJid));
+                }
+            }
+
+            // Inject edit form checkboxes
+            const editForm = document.getElementById('edit-form');
+            if (editForm && !document.getElementById('edit-group-checkboxes')) {
+                const actions = document.getElementById('edit-modal-actions');
+                if (actions) {
+                    const div = document.createElement('div');
+                    div.style.marginTop = '-4px'; div.style.marginBottom = '12px';
+                    div.innerHTML = '<p style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;"><i class="ri-notification-3-line"></i> Kirim notif ke grup:</p><div id="edit-group-checkboxes" style="display:flex;flex-direction:column;gap:4px;"></div>';
+                    editForm.insertBefore(div, actions);
+                }
+            }
+
+            // Inject task delete buttons
+            document.querySelectorAll('#task-list .task-item').forEach(item => {
+                const idx = item.getAttribute('data-index');
+                const acts = item.querySelector('.task-actions');
+                if (acts && !acts.querySelector('.btn-delete')) {
+                    const b = document.createElement('button');
+                    b.className = 'action-btn btn-delete'; b.title = 'Hapus';
+                    b.innerHTML = '<i class="ri-delete-bin-line"></i>';
+                    b.onclick = () => window.extDeleteTask(idx);
+                    acts.appendChild(b);
+                }
+            });
+
+            document.querySelectorAll('#completed-list .task-item').forEach(item => {
+                const idx = item.getAttribute('data-index');
+                const acts = item.querySelector('.task-actions');
+                if (acts && !acts.querySelector('.btn-delete')) {
+                    const b = document.createElement('button');
+                    b.className = 'action-btn btn-delete'; b.title = 'Hapus Permanen';
+                    b.innerHTML = '<i class="ri-delete-bin-line"></i>';
+                    b.onclick = () => window.extDeleteTask(idx);
+                    acts.appendChild(b);
+                }
+            });
+
+            // Inject group delete buttons
+            document.querySelectorAll('#group-list .task-item').forEach((item, i) => {
+                if (window.cachedGroups && window.cachedGroups[i]) {
+                    const acts = item.querySelector('.task-actions');
+                    if (acts && !acts.querySelector('.btn-delete')) {
+                        const b = document.createElement('button');
+                        b.className = 'action-btn btn-delete'; b.title = 'Hapus Grup';
+                        b.innerHTML = '<i class="ri-delete-bin-line"></i>';
+                        b.onclick = () => window.extDeleteGroup(window.cachedGroups[i]._id);
+                        acts.appendChild(b);
+                    }
+                }
+            });
+        };
+
+        const origOpenEdit = window.openEditModal;
+        window.openEditModal = function(index) {
+            if (origOpenEdit) origOpenEdit(index);
+            if (window.tasks && window.tasks[index] && window.renderGroupCheckboxes) {
+                const t = window.tasks[index];
+                const tgs = (t.targetGroups && t.targetGroups.length > 0) ? t.targetGroups : (window.cachedGroups||[]).map(g=>g.reminderJid);
+                window.renderGroupCheckboxes('edit-group-checkboxes', tgs);
+            }
+        };
+
+        // Initial trigger
+        if (window.renderTasks) window.renderTasks();
+    `;
+    res.type('application/javascript');
+    res.send(extCode);
+});
+
 
 // --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
@@ -197,7 +344,7 @@ app.patch('/api/tasks/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/tasks/:id', requireAdmin, async (req, res) => {
+app.delete('/api/tasks/:id', verifyXs, async (req, res) => {
     try {
         const silent = req.query.silent === 'true';
         const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
@@ -227,7 +374,7 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-app.delete('/api/settings/:id', requireAdmin, async (req, res) => {
+app.delete('/api/settings/:id', verifyXs, async (req, res) => {
     try {
         await Setting.findByIdAndDelete(req.params.id);
         res.json({ message: 'Grup berhasil dihapus' });
