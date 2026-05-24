@@ -149,7 +149,8 @@ window.renderTasks = function() {
     if (pendingTasks.length === 0) {
         taskList.innerHTML = `<div class="empty-state"><i class="ri-check-double-line"></i><p>Hore! Tidak ada tugas yang belum selesai.</p></div>`;
     } else {
-        taskList.innerHTML = pendingTasks.map((task, index) => {
+        taskList.innerHTML = pendingTasks.map((task) => {
+            const realIndex = tasks.indexOf(task);
             const timeInfo = getTimeRemaining(task.date || task.deadline);
             let dateFmt = 'Belum ada batas waktu';
             const targetDateStr = task.date || task.deadline;
@@ -164,15 +165,15 @@ window.renderTasks = function() {
             }
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             return `
-                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-index="${index}">
+                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-index="${realIndex}">
                     <div class="task-info">
                         <div class="task-name-row"><span class="task-name">${esc(task.name)}</span>${priorityBadge(task.priority)}</div>
                         ${detailHtml}
                         <div class="task-date"><i class="ri-calendar-2-line"></i> ${dateFmt} <span class="badge ${timeInfo.class}">${timeInfo.text}</span></div>
                     </div>
                     <div class="task-actions">
-                        <button class="action-btn btn-complete" onclick="window.completeTask(${index})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
-                        <button class="action-btn btn-edit" onclick="window.openEditModal(${index})" title="Edit"><i class="ri-pencil-line"></i></button>
+                        <button class="action-btn btn-complete" onclick="window.completeTask(${realIndex})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
+                        <button class="action-btn btn-edit" onclick="window.openEditModal(${realIndex})" title="Edit"><i class="ri-pencil-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
