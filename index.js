@@ -46,22 +46,16 @@ app.get('/api/stats', async (req, res) => {
 
 // --- ADMIN AUTH (Hardened) ---
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'rahasia123';
-const TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000; // 2 jam
-
-// Session store: { token: { createdAt, ip } }
-const activeSessions = new Map();
+const ADMIN_TOKEN = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest('hex');
 
 // Rate limiter store: { ip: { count, resetAt } }
 const loginAttempts = new Map();
 const MAX_ATTEMPTS = 5;
 const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 menit
 
-// Bersihkan session & rate limiter yang sudah expired setiap 10 menit
+// Bersihkan rate limiter yang sudah expired setiap 10 menit
 setInterval(() => {
     const now = Date.now();
-    for (const [token, session] of activeSessions) {
-        if (now - session.createdAt > TOKEN_EXPIRY_MS) activeSessions.delete(token);
-    }
     for (const [ip, data] of loginAttempts) {
         if (now > data.resetAt) loginAttempts.delete(ip);
     }
@@ -90,11 +84,7 @@ app.post('/api/v1/sync', (req, res) => {
     if (safeCompare(password, ADMIN_PASSWORD)) {
         // Reset rate limiter on success
         loginAttempts.delete(ip);
-
-        // Generate random session token
-        const token = crypto.randomBytes(32).toString('hex');
-        activeSessions.set(token, { createdAt: now, ip });
-        res.json({ t: token });
+        res.json({ t: ADMIN_TOKEN });
     } else {
         // Increment rate limiter
         if (!attempts || now > attempts.resetAt) {
@@ -102,24 +92,13 @@ app.post('/api/v1/sync', (req, res) => {
         } else {
             attempts.count++;
         }
-        const remaining = MAX_ATTEMPTS - (loginAttempts.get(ip)?.count || 0);
         res.status(401).json({ error: 'x' });
     }
 });
 
 const verifyXs = (req, res, next) => {
     const token = req.headers['x-xs-token'];
-    if (!token) return res.status(401).json({ error: 'x' });
-
-    const session = activeSessions.get(token);
-    if (!session) return res.status(401).json({ error: 'Token tidak valid atau sudah kedaluwarsa.' });
-
-    // Check expiry
-    if (Date.now() - session.createdAt > TOKEN_EXPIRY_MS) {
-        activeSessions.delete(token);
-        return res.status(401).json({ error: 'x' });
-    }
-
+    if (!token || token !== ADMIN_TOKEN) return res.status(401).json({ error: 'x' });
     next();
 };
 
