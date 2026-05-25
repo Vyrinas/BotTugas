@@ -119,7 +119,7 @@ app.get('/api/tasks', async (req, res) => {
 app.get('/api/admin/migrate-global', async (req, res) => {
     try {
         const result = await Task.updateMany(
-            { $or: [{targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] },
+            { status: 'pending' },
             { $set: { targetGroups: ['120363407413763307@g.us'] } }
         );
         res.json({ success: true, message: `Berhasil migrasi ${result.modifiedCount} tugas.` });
