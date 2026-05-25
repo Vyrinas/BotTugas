@@ -50,7 +50,14 @@ const settingSchema = new mongoose.Schema({
     groupName: { type: String, default: '' }
 });
 
+const customCommandSchema = new mongoose.Schema({
+    jid: { type: String, required: true },
+    command: { type: String, required: true },
+    response: { type: String, required: true }
+});
+
 const Task = mongoose.model('Task', taskSchema);
 const Setting = mongoose.model('Setting', settingSchema);
+const CustomCommand = mongoose.model('CustomCommand', customCommandSchema);
 
-module.exports = { connectDB, Task, Setting };
+module.exports = { connectDB, Task, Setting, CustomCommand };

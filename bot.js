@@ -4,7 +4,7 @@ const { default: makeWASocket, DisconnectReason } = require('baileys-joss');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
-const { connectDB, Task, Setting } = require('./database');
+const { connectDB, Task, Setting, CustomCommand } = require('./database');
 const { useMongoDBAuthState } = require('./mongoAuthState');
 
 let globalSock = null;
@@ -134,7 +134,8 @@ _!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_`;
 }
 
 async function cmdList(sock, jid) {
-    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const tasks = await Task.find(q).sort({ createdAt: 1 });
     if (tasks.length === 0) {
         await sendButtons(sock, jid,
             '╔═══════════════════╗\n   📋 *DAFTAR TUGAS*\n╚═══════════════════╝\n\n✨ Tidak ada tugas aktif!',
@@ -144,7 +145,8 @@ async function cmdList(sock, jid) {
         return;
     }
 
-    const allTasks = await Task.find().sort({ createdAt: 1 });
+    const allQ = { $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const allTasks = await Task.find(allQ).sort({ createdAt: 1 });
     const completed = allTasks.filter(t => t.status === 'completed').length;
 
     let lines = [];
@@ -183,7 +185,8 @@ async function cmdDetail(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format: *!detail <nomor>*\nContoh: _!detail 1_' });
         return;
     }
-    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const tasks = await Task.find(q).sort({ createdAt: 1 });
     const task = tasks[num - 1];
     if (!task) {
         await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan. Ketik *!list* untuk melihat daftar.` });
@@ -233,7 +236,8 @@ async function cmdSelesai(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format: *!selesai <nomor>*\nContoh: _!selesai 1_\n\nKetik *!list* untuk melihat nomor tugas.' });
         return;
     }
-    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const tasks = await Task.find(q).sort({ createdAt: 1 });
     const task = tasks[num - 1];
     if (!task) {
         await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
@@ -258,7 +262,8 @@ async function cmdHapus(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format: *!hapus <nomor>*\nContoh: _!hapus 1_' });
         return;
     }
-    const tasks = await Task.find({ status: { $ne: 'completed' } }).sort({ createdAt: 1 });
+    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const tasks = await Task.find(q).sort({ createdAt: 1 });
     const task = tasks[num - 1];
     if (!task) {
         await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
@@ -276,7 +281,8 @@ async function cmdHapus(sock, jid, args) {
 }
 
 async function cmdStats(sock, jid) {
-    const all = await Task.find();
+    const q = { $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const all = await Task.find(q);
     const completed = all.filter(t => t.status === 'completed');
     const pending = all.filter(t => t.status !== 'completed');
     const missed = pending.filter(t => {
@@ -340,66 +346,65 @@ async function cmdInfo(sock, jid) {
 // ═══════════════════════════════════════
 
 async function broadcastReminder(sock, targetJid, mode = 'all') {
-    const tasks = await Task.find({ status: { $nin: ['completed', 'deleted'] } }).sort({ createdAt: 1 });
-    if (tasks.length === 0 && targetJid) {
-        await sock.sendMessage(targetJid, { text: '✨ Tidak ada tugas aktif.' });
-        return;
+    let targetGroups = [];
+    if (targetJid) {
+        targetGroups.push({ reminderJid: targetJid });
+    } else {
+        targetGroups = await Setting.find();
     }
 
-    const messages = [];
-    tasks.forEach((task, i) => {
-        const time = getTimeRemaining(task.deadline);
+    for (const group of targetGroups) {
+        const jid = group.reminderJid;
+        const q = { status: { $nin: ['completed', 'deleted'] }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+        const tasks = await Task.find(q).sort({ createdAt: 1 });
 
-        if (mode === 'critical') {
-            if (time.level === 'critical' || time.level === 'missed') {
-                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}`);
-            }
-        } else if (mode === 'evening') {
-            // Tugas yang deadline-nya besok (dalam 24 jam ke depan)
-            if (time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000) {
-                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
-            }
-        } else {
-            // Mode 'all': semua tugas aktif
-            if (targetJid) {
-                // Manual !list — tampilkan semua termasuk tanpa deadline
-                messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
-            } else {
-                // Auto broadcast — hanya yang punya deadline dan relevan
-                const isH3 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 259200000;
-                const isHariH = time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000;
-                const isCritical = time.level === 'critical';
-                const isMissed = time.level === 'missed';
-                if (isH3 || isHariH || isCritical || isMissed) {
+        if (tasks.length === 0 && targetJid) {
+            await sock.sendMessage(targetJid, { text: '✨ Tidak ada tugas aktif.' });
+            continue;
+        }
+
+        const messages = [];
+        tasks.forEach((task, i) => {
+            const time = getTimeRemaining(task.deadline);
+
+            if (mode === 'critical') {
+                if (time.level === 'critical' || time.level === 'missed') {
+                    messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}`);
+                }
+            } else if (mode === 'evening') {
+                if (time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000) {
                     messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
                 }
-            }
-        }
-    });
-
-    if (messages.length > 0) {
-        let header;
-        if (mode === 'critical') header = '⚠️ *DEADLINE MENDEKAT!*';
-        else if (mode === 'evening') header = '🌙 *PREVIEW TUGAS BESOK*';
-        else header = '📋 *PENGINGAT TUGAS*';
-
-        const msgText = `╔═══════════════════╗\n   ${header}\n╚═══════════════════╝\n\n${messages.join('\n\n')}\n\n──────────────────`;
-
-        if (targetJid) {
-            await sock.sendMessage(targetJid, { text: msgText });
-        } else {
-            const allSettings = await Setting.find();
-            for (const s of allSettings) {
-                try {
-                    await sock.sendMessage(s.reminderJid, { text: msgText });
-                    console.log(`📤 [${mode}] terkirim ke ${s.reminderJid}`);
-                } catch (e) {
-                    console.error('❌ Gagal kirim ke', s.reminderJid, e.message);
+            } else {
+                if (targetJid) {
+                    messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}${task.deadline ? '\n   📅 ' + formatDeadline(task.deadline) : ''}${task.detail ? '\n   📝 _' + task.detail + '_' : ''}`);
+                } else {
+                    const isH3 = time.diffMs !== null && time.diffMs > 86400000 && time.diffMs <= 259200000;
+                    const isHariH = time.diffMs !== null && time.diffMs > 0 && time.diffMs <= 86400000;
+                    const isCritical = time.level === 'critical';
+                    const isMissed = time.level === 'missed';
+                    if (isH3 || isHariH || isCritical || isMissed) {
+                        messages.push(`${i + 1}. *${task.name}*\n   ${time.label} ${time.text}\n   📅 ${formatDeadline(task.deadline)}`);
+                    }
                 }
             }
+        });
+
+        if (messages.length > 0) {
+            let header;
+            if (mode === 'critical') header = '⚠️ *DEADLINE MENDEKAT!*';
+            else if (mode === 'evening') header = '🌙 *PREVIEW TUGAS BESOK*';
+            else header = '📋 *PENGINGAT TUGAS*';
+
+            const msgText = `╔═══════════════════╗\n   ${header}\n╚═══════════════════╝\n\n${messages.join('\n\n')}\n\n──────────────────`;
+
+            try {
+                await sock.sendMessage(jid, { text: msgText });
+                if (!targetJid) console.log(`📤 [${mode}] terkirim ke ${jid}`);
+            } catch (e) {
+                console.error('❌ Gagal kirim ke', jid, e.message);
+            }
         }
-    } else if (mode === 'critical') {
-        console.log('ℹ️ Tidak ada tugas kritis saat ini.');
     }
 }
 
@@ -609,8 +614,51 @@ async function startBot() {
                         await Setting.findOneAndDelete({ reminderJid: jid });
                         await sock.sendMessage(jid, { text: '🔕 Pengingat otomatis dimatikan untuk grup ini.' });
                         break;
+                    case '!addcmd':
+                        if (!args.includes('|')) {
+                            await sock.sendMessage(jid, { text: '❌ Format: *!addcmd <perintah> | <balasan>*\nContoh: _!addcmd !jadwal | Jadwal MTK hari rabu_' });
+                        } else {
+                            const p = args.split('|');
+                            const newCmd = p[0].trim().toLowerCase();
+                            const newResp = p.slice(1).join('|').trim();
+                            if (!newCmd.startsWith('!')) {
+                                await sock.sendMessage(jid, { text: '❌ Perintah harus diawali dengan tanda seru (!). Contoh: _!jadwal_' });
+                            } else {
+                                await CustomCommand.findOneAndUpdate(
+                                    { jid, command: newCmd },
+                                    { jid, command: newCmd, response: newResp },
+                                    { upsert: true }
+                                );
+                                await sock.sendMessage(jid, { text: '✅ Custom command *'+newCmd+'* berhasil disimpan untuk grup ini.' });
+                            }
+                        }
+                        break;
+                    case '!delcmd':
+                        const delCmd = args.trim().toLowerCase();
+                        if (!delCmd) {
+                            await sock.sendMessage(jid, { text: '❌ Format: *!delcmd <perintah>*\nContoh: _!delcmd !jadwal_' });
+                        } else {
+                            const res = await CustomCommand.findOneAndDelete({ jid, command: delCmd });
+                            if (res) await sock.sendMessage(jid, { text: '✅ Custom command *'+delCmd+'* dihapus.' });
+                            else await sock.sendMessage(jid, { text: '❌ Command *'+delCmd+'* tidak ditemukan di grup ini.' });
+                        }
+                        break;
+                    case '!listcmd':
+                        const cmds = await CustomCommand.find({ jid });
+                        if (cmds.length === 0) {
+                            await sock.sendMessage(jid, { text: '✨ Belum ada custom command di grup ini.' });
+                        } else {
+                            const listStr = cmds.map(c => '• ' + c.command).join('\n');
+                            await sock.sendMessage(jid, { text: '╔═══════════════════╗\n   🛠️ *CUSTOM COMMANDS*\n╚═══════════════════╝\n\n' + listStr });
+                        }
+                        break;
                     default:
-                        await sock.sendMessage(jid, { text: '❓ Perintah tidak dikenali. Ketik *!menu* untuk bantuan.' });
+                        const custom = await CustomCommand.findOne({ jid, command: cmd.toLowerCase() });
+                        if (custom) {
+                            await sock.sendMessage(jid, { text: custom.response });
+                        } else {
+                            await sock.sendMessage(jid, { text: '❓ Perintah tidak dikenali. Ketik *!menu* untuk bantuan.' });
+                        }
                 }
             } catch (err) {
                 console.error('❌ Command error:', err);

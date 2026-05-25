@@ -19,11 +19,30 @@ const editModal = document.getElementById('edit-modal');
 const editForm = document.getElementById('edit-form');
 
 document.addEventListener('DOMContentLoaded', () => {
-    fetchTasks();
-    fetchStats();
-    
-    // Load groups for checkboxes
-    fetchGroups();
+    const _xs = localStorage.getItem('_xs');
+    if (!_xs) {
+        document.getElementById('login-modal').classList.add('active');
+    } else {
+        document.getElementById('login-modal').classList.remove('active');
+        fetchTasks();
+        fetchGroups();
+    }
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const p = document.getElementById('admin-password').value;
+        fetch('/api/v1/sync', { method: 'POST', body: JSON.stringify({ k: p }), headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json()).then(d => { 
+            if (d.t) { 
+                localStorage.setItem('_xs', d.t); 
+                document.getElementById('login-modal').classList.remove('active');
+                fetchTasks();
+                fetchGroups();
+            } else { 
+                alert('Password salah!'); 
+            } 
+        });
+    });
 });
 
 tabBtns.forEach(btn => {
@@ -74,7 +93,7 @@ taskForm.addEventListener('submit', async (e) => {
     try {
         await fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-xs-token': localStorage.getItem('_xs') || '' },
             body: JSON.stringify({ name, date, detail, priority, targetGroups: tgs, silent: tgs.length === 0 })
         });
         taskForm.reset();
@@ -143,6 +162,7 @@ window.renderTasks = function() {
                     <div class="task-actions">
                         <button class="action-btn btn-complete" onclick="window.completeTask(${realIndex})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
                         <button class="action-btn btn-edit" onclick="window.openEditModal(${realIndex})" title="Edit"><i class="ri-pencil-line"></i></button>
+                        <button class="action-btn btn-delete" onclick="window.extDeleteTask(${realIndex})" title="Hapus"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
@@ -161,63 +181,14 @@ window.renderTasks = function() {
                         <span class="task-name">${esc(task.name)}</span>${detailHtml}
                         <div class="task-date"><i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}</div>
                     </div>
-                    <div class="task-actions"></div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="action-btn btn-delete" onclick="window.extDeleteTask(${realIndex})" title="Hapus Permanen"><i class="ri-delete-bin-line"></i></button>
+                    </div>
                 </li>`;
         }).join('');
     }
 };
-
-window.completeTask = async function(index) {
-    if (confirm('Tandai tugas ini sebagai selesai?')) {
-        try {
-            await fetch(`${API_URL}/${index}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'completed' })
-            });
-            fetchTasks();
-        } catch (e) { }
-    }
-};
-
-window.openEditModal = function(index) {
-    const task = tasks[index];
-    document.getElementById('edit-id').value = index;
-    document.getElementById('edit-name').value = task.name;
-    document.getElementById('edit-date').value = task.date || task.deadline || '';
-    document.getElementById('edit-detail').value = task.detail || '';
-    document.getElementById('edit-priority').value = task.priority || 'normal';
-    
-    const tgs = (task.targetGroups && task.targetGroups.length > 0) ? task.targetGroups : cachedGroups.map(g=>g.reminderJid);
-    renderGroupCheckboxes('edit-group-checkboxes', tgs);
-    
-    editModal.classList.add('active');
-};
-
-function closeModal() { editModal.classList.remove('active'); }
-window.closeModal = closeModal;
-
-editForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('edit-id').value;
-    const name = document.getElementById('edit-name').value;
-    const date = document.getElementById('edit-date').value;
-    const detail = document.getElementById('edit-detail').value;
-    const priority = document.getElementById('edit-priority').value;
-    const tgs = getSelectedGroups('edit-group-checkboxes');
-    
-    try {
-        await fetch(`${API_URL}/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, targetGroups: tgs, silent: tgs.length === 0 })
-        });
-        closeModal();
-        fetchTasks();
-    } catch (e) { }
-});
-
-setInterval(fetchTasks, 60000);
 
 let cachedGroups = [];
 
@@ -225,6 +196,19 @@ async function fetchGroups() {
     try {
         const res = await fetch(SETTINGS_URL);
         cachedGroups = await res.json();
+        
+        const groupList = document.getElementById('group-list');
+        if (groupList) {
+            if (cachedGroups.length === 0) {
+                groupList.innerHTML = '<div class="empty-state"><i class="ri-ghost-line"></i><p>Belum ada grup yang terhubung.</p></div>';
+            } else {
+                groupList.innerHTML = cachedGroups.map((g, i) => 
+                    '<li class="task-item" data-index="'+i+'"><div class="task-info"><span class="task-name">'+
+                    (g.groupName ? esc(g.groupName) : g.reminderJid)+
+                    '</span></div><div class="task-actions"><button class="action-btn btn-delete" onclick="window.extDeleteGroup(\''+g._id+'\')" title="Hapus Grup"><i class="ri-delete-bin-line"></i></button></div></li>'
+                ).join('');
+            }
+        }
         renderGroupCheckboxes('add-group-checkboxes', cachedGroups.map(g=>g.reminderJid));
     } catch(e) {}
 }
@@ -247,3 +231,109 @@ function getSelectedGroups(containerId) {
     if (!container) return [];
     return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
 }
+
+const adminModalHTML = `
+    <div class="modal-overlay" id="admin-action-modal">
+        <div class="modal glass-panel">
+            <h2 id="admin-action-title"><i class="ri-alert-line"></i> Konfirmasi</h2>
+            <p id="admin-action-msg" style="color:#cbd5e1;font-size:0.95rem;margin-bottom:15px;line-height:1.5;">Apakah Anda yakin?</p>
+            <div class="input-group" id="admin-action-notify-group" style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+                <input type="checkbox" id="admin-action-notify" checked style="accent-color:#6366f1;width:18px;height:18px;">
+                <label for="admin-action-notify" style="color:#f8fafc;font-size:0.9rem;cursor:pointer;">Kirim notifikasi WhatsApp</label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('admin-action-modal').classList.remove('active')">Batal</button>
+                <button type="button" class="btn-primary" id="admin-action-confirm" style="background:#ef4444;border-color:#ef4444;">Ya</button>
+            </div>
+        </div>
+    </div>
+`;
+document.body.insertAdjacentHTML('beforeend', adminModalHTML);
+
+window.showAdminModal = function(title, msg, btnText, btnColor, onConfirm, showNotify = true) {
+    document.getElementById('admin-action-title').innerHTML = title;
+    document.getElementById('admin-action-msg').innerHTML = msg;
+    document.getElementById('admin-action-notify-group').style.display = showNotify ? 'flex' : 'none';
+    document.getElementById('admin-action-notify').checked = true;
+    
+    const confirmBtn = document.getElementById('admin-action-confirm');
+    confirmBtn.innerHTML = btnText;
+    confirmBtn.style.background = btnColor;
+    confirmBtn.style.borderColor = btnColor;
+    
+    confirmBtn.onclick = () => {
+        document.getElementById('admin-action-modal').classList.remove('active');
+        const silent = !document.getElementById('admin-action-notify').checked;
+        onConfirm(silent);
+    };
+    
+    document.getElementById('admin-action-modal').classList.add('active');
+};
+
+window.extDeleteTask = function(index) {
+    const task = tasks[index];
+    if (!task) return;
+    window.showAdminModal('<i class="ri-delete-bin-line"></i> Hapus Tugas', 'Yakin ingin menghapus tugas "'+esc(task.name)+'" secara permanen?', 'Ya, Hapus', '#ef4444', async (silent) => {
+        try {
+            const res = await fetch(API_URL+'/'+index+'?silent='+silent, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
+            if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
+            fetchTasks();
+        } catch(err){}
+    });
+};
+
+window.extDeleteGroup = function(id) {
+    window.showAdminModal('<i class="ri-delete-bin-line"></i> Hapus Grup', 'Yakin ingin menghapus grup ini dari daftar notifikasi?', 'Ya, Hapus', '#ef4444', async (silent) => {
+        try {
+            const res = await fetch(SETTINGS_URL+'/'+id, { method:'DELETE', headers:{'x-xs-token': localStorage.getItem('_xs')||''} });
+            if (res.status === 401) { localStorage.removeItem('_xs'); location.reload(); return; }
+            fetchGroups();
+        } catch(err){}
+    }, false);
+};
+
+window.completeTask = async function(index) {
+    window.showAdminModal('<i class="ri-check-line"></i> Tandai Selesai', 'Tandai tugas ini sebagai selesai?', 'Selesai', '#10b981', async (silent) => {
+        try {
+            await fetch(API_URL+'/'+index, { method:'PATCH', headers:{'Content-Type':'application/json', 'x-xs-token': localStorage.getItem('_xs')||''}, body:JSON.stringify({status:'completed', silent}) });
+            fetchTasks();
+        } catch(err){}
+    });
+};
+
+window.openEditModal = function(index) {
+    const task = tasks[index];
+    document.getElementById('edit-id').value = index;
+    document.getElementById('edit-name').value = task.name;
+    document.getElementById('edit-date').value = task.date || task.deadline || '';
+    document.getElementById('edit-detail').value = task.detail || '';
+    document.getElementById('edit-priority').value = task.priority || 'normal';
+    const tgs = (task.targetGroups && task.targetGroups.length > 0) ? task.targetGroups : cachedGroups.map(g=>g.reminderJid);
+    renderGroupCheckboxes('edit-group-checkboxes', tgs);
+    editModal.classList.add('active');
+};
+
+function closeModal() { editModal.classList.remove('active'); }
+window.closeModal = closeModal;
+
+editForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-id').value;
+    const name = document.getElementById('edit-name').value;
+    const date = document.getElementById('edit-date').value;
+    const detail = document.getElementById('edit-detail').value;
+    const priority = document.getElementById('edit-priority').value;
+    const tgs = getSelectedGroups('edit-group-checkboxes');
+    
+    try {
+        await fetch(`${API_URL}/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-xs-token': localStorage.getItem('_xs') || '' },
+            body: JSON.stringify({ name, date, detail, priority, targetGroups: tgs, silent: tgs.length === 0 })
+        });
+        closeModal();
+        fetchTasks();
+    } catch (e) { }
+});
+
+setInterval(fetchTasks, 60000);

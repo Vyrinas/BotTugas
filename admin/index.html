@@ -122,7 +122,9 @@
                 <button class="tab-btn" data-target="completed">
                     <i class="ri-check-line"></i> Selesai
                 </button>
-
+                <button class="tab-btn" data-target="settings">
+                    <i class="ri-group-line"></i> Grup
+                </button>
             </div>
 
             <section class="task-list-section">
@@ -139,7 +141,17 @@
                     <ul id="completed-list" class="task-list"></ul>
                 </div>
 
-
+                <div id="settings" class="tab-content">
+                    <div class="settings-header">
+                        <p class="settings-hint"><i class="ri-information-line"></i> Daftar grup yang menerima notifikasi otomatis. Gunakan <b>!setgrup</b> di WhatsApp untuk menambah.</p>
+                    </div>
+                    <ul id="group-list" class="task-list">
+                        <div class="empty-state">
+                            <i class="ri-loader-4-line spin"></i>
+                            <p>Memuat daftar grup...</p>
+                        </div>
+                    </ul>
+                </div>
             </section>
         </main>
 
@@ -179,6 +191,22 @@
                 <div class="modal-actions" id="edit-modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>
                     <button type="submit" class="btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay active" id="login-modal" style="z-index: 999; background: #0f172a;">
+        <div class="modal glass-panel">
+            <h2><i class="ri-lock-password-line"></i> Admin Login</h2>
+            <form id="login-form">
+                <div class="input-group">
+                    <i class="ri-key-line input-icon"></i>
+                    <input type="password" id="admin-password" required placeholder="Masukkan Password">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn-primary">Masuk</button>
                 </div>
             </form>
         </div>
