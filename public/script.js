@@ -49,7 +49,7 @@ async function fetchStats() {
 
 async function fetchTasks() {
     try {
-        const response = await fetch(API_URL);
+        const response = await fetch(API_URL + '?group=120363407413763307@g.us');
         tasks = await response.json();
         window.tasks = tasks;
         if (window.renderTasks) window.renderTasks();
@@ -70,7 +70,7 @@ taskForm.addEventListener('submit', async (e) => {
         await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, targetGroups: [], silent: false })
+            body: JSON.stringify({ name, date, detail, priority, targetGroups: ['120363407413763307@g.us'], silent: false })
         });
         taskForm.reset();
         document.getElementById('task-priority').value = 'normal';
@@ -199,7 +199,7 @@ editForm.addEventListener('submit', async (e) => {
         await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, targetGroups: [], silent: false })
+            body: JSON.stringify({ name, date, detail, priority, targetGroups: ['120363407413763307@g.us'], silent: false })
         });
         closeModal();
         fetchTasks();
