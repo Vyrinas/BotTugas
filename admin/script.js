@@ -56,8 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Live clock topbar
     setInterval(() => {
         const now = new Date();
-        const options = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-        document.getElementById('real-time-clock').textContent = now.toLocaleDateString('id-ID', options) + ' WITA';
+        const options = { timeZone: 'Asia/Makassar', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+        document.getElementById('real-time-clock').textContent = now.toLocaleString('id-ID', options) + ' WITA';
     }, 1000);
 
     if (!_xs || !bUrl) {
