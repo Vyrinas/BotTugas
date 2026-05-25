@@ -232,19 +232,107 @@ async function cmdDetail(sock, jid, args) {
     await sock.sendMessage(jid, { text: msg });
 }
 
+function parseSmartDate(input) {
+    if (!input || input.trim() === '') return '';
+    let text = input.toLowerCase().trim();
+    
+    const nowUtc = new Date().getTime();
+    const witaDate = new Date(nowUtc + (8 * 60 * 60 * 1000));
+    
+    let year = witaDate.getUTCFullYear();
+    let month = witaDate.getUTCMonth();
+    let date = witaDate.getUTCDate();
+    
+    let hours = 23;
+    let minutes = 59;
+    
+    const timeMatch = text.match(/(?:jam|pukul)?\s*(\d{1,2})[:.](\d{2})/);
+    if (timeMatch) {
+        hours = parseInt(timeMatch[1]);
+        minutes = parseInt(timeMatch[2]);
+        text = text.replace(timeMatch[0], '').trim();
+    } else {
+        const hourOnlyMatch = text.match(/(?:jam|pukul)\s*(\d{1,2})(?!\d)/);
+        if (hourOnlyMatch) {
+            hours = parseInt(hourOnlyMatch[1]);
+            minutes = 0;
+            text = text.replace(hourOnlyMatch[0], '').trim();
+        }
+    }
+
+    if (text.includes('besok') || text.includes('bsk')) {
+        date += 1;
+    } else if (text.includes('lusa')) {
+        date += 2;
+    } else if (text.includes('hari ini')) {
+        // keep today
+    } else {
+        const days = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        let foundDay = -1;
+        for (let i = 0; i < days.length; i++) {
+            if (text.includes(days[i])) {
+                foundDay = i;
+                break;
+            }
+        }
+        
+        if (foundDay !== -1) {
+            let currentDay = witaDate.getUTCDay();
+            let distance = foundDay - currentDay;
+            if (distance <= 0) distance += 7;
+            if (text.includes('depan')) distance += 7;
+            date += distance;
+        } else {
+            const months = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+            const shortMonths = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+            
+            const dateMonthMatch = text.match(/(\d{1,2})\s+([a-z]+)/);
+            if (dateMonthMatch) {
+                const d = parseInt(dateMonthMatch[1]);
+                const mStr = dateMonthMatch[2];
+                let mIdx = months.findIndex(m => m === mStr);
+                if (mIdx === -1) mIdx = shortMonths.findIndex(m => m === mStr);
+                
+                if (mIdx !== -1) {
+                    month = mIdx;
+                    date = d;
+                    let testDate = new Date(Date.UTC(year, month, date));
+                    if (testDate.getTime() < witaDate.getTime() - (24 * 60 * 60 * 1000)) {
+                        year += 1;
+                    }
+                }
+            } else {
+                const parsed = new Date(input);
+                if (!isNaN(parsed.getTime())) return parsed.toISOString();
+                
+                if (text && text !== 'besok' && text !== 'bsk' && text !== 'lusa' && text !== 'hari ini' && foundDay === -1) {
+                    return null;
+                }
+            }
+        }
+    }
+    
+    const finalUtcTime = new Date(Date.UTC(year, month, date, hours, minutes, 0)).getTime() - (8 * 60 * 60 * 1000);
+    return new Date(finalUtcTime).toISOString();
+}
+
 async function cmdTambah(sock, jid, args) {
     if (!args) {
-        await sock.sendMessage(jid, { text: '❌ Format: *!tambah <nama> | <deadline> | <detail>*\n\n💡 Contoh:\n_!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_\n_!tambah Presentasi_\n_!tambah Essay | 2026-05-18_' });
+        await sock.sendMessage(jid, { text: '❌ Format: *!tambah <nama> | <kapan (opsional)> | <detail (opsional)>*\n\n💡 Contoh:\n_!tambah PR Matematika | besok jam 08:00_\n_!tambah Presentasi | lusa_\n_!tambah Beli Spidol_' });
         return;
     }
     const parts = args.split('|').map(s => s.trim());
     const name = parts[0];
-    const deadline = parts[1] || '';
+    const deadlineInput = parts[1] || '';
     const detail = parts[2] || '';
 
-    if (deadline && isNaN(new Date(deadline).getTime())) {
-        await sock.sendMessage(jid, { text: '❌ Format deadline salah!\nGunakan: *YYYY-MM-DDTHH:mm*\nContoh: _2026-05-20T08:00_' });
-        return;
+    let deadline = '';
+    if (deadlineInput) {
+        deadline = parseSmartDate(deadlineInput);
+        if (deadline === null) {
+            await sock.sendMessage(jid, { text: '❌ Format waktu tidak dikenali!\nGunakan format yang simpel, contoh:\n- _besok_\n- _besok jam 08:00_\n- _lusa_\n- _senin depan_\n- _12 juni_' });
+            return;
+        }
     }
     const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal', targetGroups: [jid] });
     const time = getTimeRemaining(deadline);
