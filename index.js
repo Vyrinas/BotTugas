@@ -108,25 +108,18 @@ const verifyXs = (req, res, next) => {
 // --- TASKS ---
 app.get('/api/tasks', async (req, res) => {
     try {
-        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
+        const { group } = req.query;
+        let query = { status: { $ne: 'deleted' } };
+        if (group) {
+            query.$or = [{targetGroups: group}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}];
+        }
+        const tasks = await Task.find(query).sort({ createdAt: 1 });
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ error: 'Gagal mengambil data' });
     }
 });
 
-// TEMPORARY MIGRATION ROUTE
-app.get('/api/admin/migrate-global', async (req, res) => {
-    try {
-        const result = await Task.updateMany(
-            { status: 'pending' },
-            { $set: { targetGroups: ['120363407413763307@g.us'] } }
-        );
-        res.json({ success: true, message: `Berhasil migrasi ${result.modifiedCount} tugas.` });
-    } catch (error) {
-        res.status(500).json({ error: 'Migrasi gagal', details: error.message });
-    }
-});
 
 app.post('/api/tasks', async (req, res) => {
     const { name, date, detail, priority, silent, targetGroups } = req.body;
