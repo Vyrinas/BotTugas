@@ -20,11 +20,18 @@
 
     <div class="container glass-panel">
         <header>
-            <div class="header-title">
-                <i class="ri-checkbox-multiple-line logo-icon"></i>
-                <h1>RemindMe</h1>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div class="header-title">
+                        <i class="ri-checkbox-multiple-line logo-icon"></i>
+                        <h1>RemindMe <span style="font-size: 0.8rem; color: #ef4444; vertical-align: middle;">ADMIN</span></h1>
+                    </div>
+                    <p class="subtitle">Manajemen tugas otomatis terintegrasi WhatsApp</p>
+                </div>
+                <button onclick="window.logout()" style="background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.2); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; gap: 6px; align-items: center; font-size: 0.85rem; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">
+                    <i class="ri-logout-box-r-line"></i> Logout
+                </button>
             </div>
-            <p class="subtitle">Manajemen tugas otomatis terintegrasi WhatsApp</p>
             <div class="timezone-badge">
                 <i class="ri-time-line"></i> Zona Waktu: <b>WITA (Asia/Makassar)</b>
             </div>

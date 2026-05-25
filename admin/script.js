@@ -59,6 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+window.logout = function() {
+    localStorage.removeItem('_xs');
+    location.reload();
+};
+
 tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         tabBtns.forEach(b => b.classList.remove('active'));
