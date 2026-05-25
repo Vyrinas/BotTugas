@@ -21,9 +21,6 @@ const editForm = document.getElementById('edit-form');
 document.addEventListener('DOMContentLoaded', () => {
     fetchTasks();
     fetchStats();
-    
-    // Load groups for checkboxes
-    fetchGroups();
 });
 
 tabBtns.forEach(btn => {
@@ -69,18 +66,15 @@ taskForm.addEventListener('submit', async (e) => {
     const date = document.getElementById('task-date').value;
     const detail = document.getElementById('task-detail').value;
     const priority = document.getElementById('task-priority').value;
-    const tgs = getSelectedGroups('add-group-checkboxes');
-    
     try {
         await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, targetGroups: tgs, silent: tgs.length === 0 })
+            body: JSON.stringify({ name, date, detail, priority, targetGroups: [], silent: false })
         });
         taskForm.reset();
         document.getElementById('task-priority').value = 'normal';
         fetchTasks();
-        renderGroupCheckboxes('add-group-checkboxes', cachedGroups.map(g=>g.reminderJid));
     } catch (error) {}
 });
 
@@ -188,9 +182,6 @@ window.openEditModal = function(index) {
     document.getElementById('edit-detail').value = task.detail || '';
     document.getElementById('edit-priority').value = task.priority || 'normal';
     
-    const tgs = (task.targetGroups && task.targetGroups.length > 0) ? task.targetGroups : cachedGroups.map(g=>g.reminderJid);
-    renderGroupCheckboxes('edit-group-checkboxes', tgs);
-    
     editModal.classList.add('active');
 };
 
@@ -204,13 +195,11 @@ editForm.addEventListener('submit', async (e) => {
     const date = document.getElementById('edit-date').value;
     const detail = document.getElementById('edit-detail').value;
     const priority = document.getElementById('edit-priority').value;
-    const tgs = getSelectedGroups('edit-group-checkboxes');
-    
     try {
         await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date, detail, priority, targetGroups: tgs, silent: tgs.length === 0 })
+            body: JSON.stringify({ name, date, detail, priority, targetGroups: [], silent: false })
         });
         closeModal();
         fetchTasks();
@@ -218,32 +207,3 @@ editForm.addEventListener('submit', async (e) => {
 });
 
 setInterval(fetchTasks, 60000);
-
-let cachedGroups = [];
-
-async function fetchGroups() {
-    try {
-        const res = await fetch(SETTINGS_URL);
-        cachedGroups = await res.json();
-        renderGroupCheckboxes('add-group-checkboxes', cachedGroups.map(g=>g.reminderJid));
-    } catch(e) {}
-}
-
-function renderGroupCheckboxes(containerId, checkedJids) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    if (!cachedGroups || cachedGroups.length === 0) {
-        container.innerHTML = '<p style="color:#64748b;font-size:0.8rem;margin:0;">Tidak ada grup yang tersedia.</p>';
-        return;
-    }
-    container.innerHTML = cachedGroups.map(g => {
-        const isChecked = checkedJids.includes(g.reminderJid) ? 'checked' : '';
-        return '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;color:#f8fafc;cursor:pointer;"><input type="checkbox" value="'+g.reminderJid+'" '+isChecked+' style="accent-color:#6366f1;"> '+(g.groupName ? esc(g.groupName) : g.reminderJid)+'</label>';
-    }).join('');
-}
-
-function getSelectedGroups(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return [];
-    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
-}
