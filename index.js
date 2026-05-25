@@ -115,6 +115,19 @@ app.get('/api/tasks', async (req, res) => {
     }
 });
 
+// TEMPORARY MIGRATION ROUTE
+app.get('/api/admin/migrate-global', async (req, res) => {
+    try {
+        const result = await Task.updateMany(
+            { $or: [{targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] },
+            { $set: { targetGroups: ['120363407413763307@g.us'] } }
+        );
+        res.json({ success: true, message: `Berhasil migrasi ${result.modifiedCount} tugas.` });
+    } catch (error) {
+        res.status(500).json({ error: 'Migrasi gagal', details: error.message });
+    }
+});
+
 app.post('/api/tasks', async (req, res) => {
     const { name, date, detail, priority, silent, targetGroups } = req.body;
     if (!name) return res.status(400).json({ error: 'Nama tugas wajib diisi' });
