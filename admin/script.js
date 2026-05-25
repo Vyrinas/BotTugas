@@ -266,7 +266,7 @@ function renderLogs(logs) {
     // Capture logs as text lines
     const logHTML = logs.map(log => {
         const date = new Date(log.timestamp);
-        const timeStr = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const timeStr = date.toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar', hour: '2-digit', minute: '2-digit', second: '2-digit' });
         
         let levelClass = 'log-info';
         if (log.level === 'warn') levelClass = 'log-warn';
@@ -709,7 +709,8 @@ function renderTasks() {
                     const hasTime = targetDateStr.includes('T') || targetDateStr.includes(':');
                     const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
                     if (hasTime) { opts.hour = '2-digit'; opts.minute = '2-digit'; }
-                    dateFmt = dateObj.toLocaleDateString('id-ID', opts).replace(',', '') + ' WITA';
+                    opts.timeZone = 'Asia/Makassar';
+                    dateFmt = dateObj.toLocaleString('id-ID', opts).replace(',', '') + ' WITA';
                 }
             }
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
@@ -742,7 +743,7 @@ function renderTasks() {
         completedList.innerHTML = compTasks.map((task) => {
             const realIndex = tasks.findIndex(t => t === task);
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
-            const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
                 <li class="task-item completed" data-index="${realIndex}">
                     <div class="task-info">

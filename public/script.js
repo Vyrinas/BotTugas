@@ -123,7 +123,8 @@ window.renderTasks = function() {
                     const hasTime = targetDateStr.includes('T') || targetDateStr.includes(':');
                     const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
                     if (hasTime) { opts.hour = '2-digit'; opts.minute = '2-digit'; }
-                    dateFmt = dateObj.toLocaleDateString('id-ID', opts).replace(',', '') + ' WITA';
+                    opts.timeZone = 'Asia/Makassar';
+                    dateFmt = dateObj.toLocaleString('id-ID', opts).replace(',', '') + ' WITA';
                 }
             }
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
@@ -148,7 +149,7 @@ window.renderTasks = function() {
         completedList.innerHTML = compTasks.map((task) => {
             const realIndex = tasks.findIndex(t => t === task);
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
-            const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
                 <li class="task-item completed" data-index="${realIndex}">
                     <div class="task-info">
