@@ -246,7 +246,7 @@ async function cmdTambah(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format deadline salah!\nGunakan: *YYYY-MM-DDTHH:mm*\nContoh: _2026-05-20T08:00_' });
         return;
     }
-    const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal' });
+    const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal', targetGroups: [jid] });
     const time = getTimeRemaining(deadline);
     const body = `✅ *Tugas berhasil ditambahkan!*\n──────────────────\n*Nama:* ${name}\n*Deadline:* ${formatDeadline(deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${detail || '-'}`;
     await sendButtons(sock, jid, body, [
