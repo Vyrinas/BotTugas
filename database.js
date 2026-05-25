@@ -56,8 +56,36 @@ const customCommandSchema = new mongoose.Schema({
     response: { type: String, required: true }
 });
 
+const botStatusSchema = new mongoose.Schema({
+    status: { type: String, default: 'disconnected' }, // 'connected', 'connecting', 'disconnected'
+    uptime: { type: Number, default: 0 },
+    qr: { type: String, default: '' },
+    lastActive: { type: Date, default: Date.now },
+    phone: { type: String, default: '' },
+    name: { type: String, default: '' }
+}, { timestamps: true });
+
+const botLogSchema = new mongoose.Schema({
+    level: { type: String, default: 'info' }, // 'info', 'warn', 'error', 'cmd', 'cron', 'web'
+    message: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now }
+}, { 
+    timestamps: true,
+    capped: { size: 1024 * 1024, max: 1000 } // Maksimal 1MB / 1000 baris log
+});
+
+const botActionSchema = new mongoose.Schema({
+    action: { type: String, required: true }, // 'morning_reminder', 'evening_reminder', 'critical_reminder', 'reconnect', 'broadcast'
+    params: { type: Object, default: {} },
+    status: { type: String, default: 'pending' } // 'pending', 'processed', 'failed'
+}, { timestamps: true });
+
 const Task = mongoose.model('Task', taskSchema);
 const Setting = mongoose.model('Setting', settingSchema);
 const CustomCommand = mongoose.model('CustomCommand', customCommandSchema);
+const BotStatus = mongoose.model('BotStatus', botStatusSchema);
+const BotLog = mongoose.model('BotLog', botLogSchema);
+const BotAction = mongoose.model('BotAction', botActionSchema);
 
-module.exports = { connectDB, Task, Setting, CustomCommand };
+module.exports = { connectDB, Task, Setting, CustomCommand, BotStatus, BotLog, BotAction };
+

@@ -4,13 +4,38 @@ const { default: makeWASocket, DisconnectReason } = require('baileys-joss');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const cron = require('node-cron');
-const { connectDB, Task, Setting, CustomCommand } = require('./database');
+const { connectDB, Task, Setting, CustomCommand, BotStatus, BotLog, BotAction } = require('./database');
 const { useMongoDBAuthState } = require('./mongoAuthState');
 
 let globalSock = null;
 let activeChangeStream = null;
 let isReconnecting = false;
 const botStartTime = new Date();
+
+// Helper untuk log ke MongoDB Atlas
+async function logBotEvent(level, message) {
+    const timeStr = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Makassar' });
+    console.log(`[${timeStr}] [${level.toUpperCase()}] ${message}`);
+    try {
+        await BotLog.create({ level, message });
+    } catch (e) {
+        console.error('⚠️ Gagal menyimpan log ke DB:', e.message);
+    }
+}
+
+// Helper untuk memperbarui status bot di MongoDB
+async function updateBotStatus(data) {
+    try {
+        await BotStatus.findOneAndUpdate(
+            {},
+            { ...data, lastActive: new Date() },
+            { upsert: true, new: true }
+        );
+    } catch (e) {
+        console.error('⚠️ Gagal memperbarui status bot:', e.message);
+    }
+}
+
 
 // Lazy-loaded interactive message utilities
 let _interactiveUtils = null;
@@ -400,9 +425,13 @@ async function broadcastReminder(sock, targetJid, mode = 'all') {
 
             try {
                 await sock.sendMessage(jid, { text: msgText });
-                if (!targetJid) console.log(`📤 [${mode}] terkirim ke ${jid}`);
+                if (!targetJid) {
+                    await logBotEvent('cron', `Pengingat [${mode}] otomatis terkirim ke grup ${group.groupName || jid}`);
+                } else {
+                    await logBotEvent('info', `Pengingat manual [${mode}] dikirim ke ${jid}`);
+                }
             } catch (e) {
-                console.error('❌ Gagal kirim ke', jid, e.message);
+                await logBotEvent('error', `Gagal mengirim pengingat ke ${jid}: ${e.message}`);
             }
         }
     }
@@ -418,7 +447,7 @@ function setupChangeStream() {
         activeChangeStream = null;
     }
 
-    console.log('📡 Memantau perubahan database...');
+    logBotEvent('info', 'Memantau perubahan database tugas secara real-time...');
     const changeStream = Task.watch([], { fullDocument: 'updateLookup' });
     activeChangeStream = changeStream;
 
@@ -456,17 +485,24 @@ function setupChangeStream() {
         }
 
         if (msg) {
+            let sentCount = 0;
             for (const s of allSettings) {
                 // If task has specific targetGroups, only send to those
                 if (taskTargetGroups && !taskTargetGroups.includes(s.reminderJid)) continue;
-                try { await globalSock.sendMessage(s.reminderJid, { text: msg }); }
-                catch (e) { console.error('❌ Notif gagal:', s.reminderJid); }
+                try { 
+                    await globalSock.sendMessage(s.reminderJid, { text: msg }); 
+                    sentCount++;
+                }
+                catch (e) { await logBotEvent('error', `Gagal mengirim notif perubahan tugas ke ${s.reminderJid}: ${e.message}`); }
+            }
+            if (sentCount > 0) {
+                await logBotEvent('info', `Notifikasi perubahan tugas disiarkan ke ${sentCount} grup WhatsApp.`);
             }
         }
     });
 
-    changeStream.on('error', (err) => {
-        console.error('Change Stream Error:', err.message);
+    changeStream.on('error', async (err) => {
+        await logBotEvent('error', `Change Stream Pemantauan Tugas Error: ${err.message}`);
         activeChangeStream = null;
         setTimeout(() => { if (globalSock) setupChangeStream(); }, 10000);
     });
@@ -494,8 +530,97 @@ function mapButtonToCommand(btnId) {
 }
 
 // ═══════════════════════════════════════
+// BOT ACTION STREAM (Real-time Web Controls)
+// ═══════════════════════════════════════
+
+let activeActionStream = null;
+function setupBotActionStream() {
+    if (activeActionStream) {
+        activeActionStream.close().catch(() => {});
+        activeActionStream = null;
+    }
+
+    logBotEvent('info', 'Memantau instruksi kendali (BotAction) dari Web secara real-time...');
+    const actionStream = BotAction.watch();
+    activeActionStream = actionStream;
+
+    actionStream.on('change', async (change) => {
+        if (change.operationType === 'insert') {
+            const actionDoc = change.fullDocument;
+            if (actionDoc.status !== 'pending') return;
+
+            await logBotEvent('info', `Menerima perintah aksi dari Web: ${actionDoc.action}`);
+
+            try {
+                if (actionDoc.action === 'morning_reminder') {
+                    if (globalSock) {
+                        await broadcastReminder(globalSock, null, 'all');
+                        await logBotEvent('cron', 'Pengingat pagi manual berhasil dipicu dan dikirim.');
+                    } else {
+                        throw new Error('Bot sedang offline / tidak terhubung ke WhatsApp');
+                    }
+                } else if (actionDoc.action === 'evening_reminder') {
+                    if (globalSock) {
+                        await broadcastReminder(globalSock, null, 'evening');
+                        await logBotEvent('cron', 'Pengingat malam manual berhasil dipicu dan dikirim.');
+                    } else {
+                        throw new Error('Bot sedang offline / tidak terhubung ke WhatsApp');
+                    }
+                } else if (actionDoc.action === 'critical_reminder') {
+                    if (globalSock) {
+                        await broadcastReminder(globalSock, null, 'critical');
+                        await logBotEvent('cron', 'Pengingat kritis manual berhasil dipicu dan dikirim.');
+                    } else {
+                        throw new Error('Bot sedang offline / tidak terhubung ke WhatsApp');
+                    }
+                } else if (actionDoc.action === 'reconnect') {
+                    await logBotEvent('warn', 'Mengeksekusi instruksi Paksa Reconnect...');
+                    if (globalSock) {
+                        globalSock.end(new Error('Manual reconnect request'));
+                    } else {
+                        startBot();
+                    }
+                } else if (actionDoc.action === 'broadcast') {
+                    if (globalSock) {
+                        const { text, targetGroups } = actionDoc.params;
+                        if (!text) throw new Error('Isi teks broadcast tidak boleh kosong');
+                        
+                        let groups = [];
+                        if (targetGroups && targetGroups.length > 0) {
+                            groups = targetGroups.map(jid => ({ reminderJid: jid }));
+                        } else {
+                            groups = await Setting.find();
+                        }
+
+                        for (const g of groups) {
+                            await globalSock.sendMessage(g.reminderJid, { text });
+                            await logBotEvent('info', `Pesan broadcast terkirim ke grup: ${g.reminderJid}`);
+                        }
+                    } else {
+                        throw new Error('Bot sedang offline / tidak terhubung ke WhatsApp');
+                    }
+                }
+
+                await BotAction.findByIdAndUpdate(actionDoc._id, { status: 'processed' });
+            } catch (err) {
+                await logBotEvent('error', `Gagal menjalankan instruksi ${actionDoc.action}: ${err.message}`);
+                await BotAction.findByIdAndUpdate(actionDoc._id, { status: 'failed' });
+            }
+        }
+    });
+
+    actionStream.on('error', async (err) => {
+        await logBotEvent('error', `BotAction Stream Error: ${err.message}`);
+        activeActionStream = null;
+        setTimeout(() => { setupBotActionStream(); }, 10000);
+    });
+}
+
+// ═══════════════════════════════════════
 // WHATSAPP BOT
 // ═══════════════════════════════════════
+
+let heartbeatInterval = null;
 
 async function startBot() {
     if (isReconnecting) return;
@@ -503,6 +628,28 @@ async function startBot() {
 
     try {
         await connectDB();
+        
+        // Aktifkan pemantau aksi instan dari Web
+        setupBotActionStream();
+
+        // Aktifkan status detak jantung berkala setiap 30 detik
+        if (!heartbeatInterval) {
+            heartbeatInterval = setInterval(async () => {
+                if (globalSock) {
+                    const uptimeMs = Date.now() - botStartTime.getTime();
+                    await updateBotStatus({
+                        status: 'connected',
+                        uptime: uptimeMs,
+                        phone: globalSock.user?.id ? globalSock.user.id.split(':')[0] : '',
+                        name: globalSock.user?.name || 'RemindMe Bot',
+                        qr: ''
+                    });
+                } else {
+                    await updateBotStatus({ lastActive: new Date() });
+                }
+            }, 30000);
+        }
+
         const { state, saveCreds } = await useMongoDBAuthState();
 
         const sock = makeWASocket({
@@ -513,24 +660,53 @@ async function startBot() {
 
         sock.ev.on('creds.update', saveCreds);
 
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
-            if (qr) qrcode.generate(qr, { small: true });
+            
+            if (qr) {
+                qrcode.generate(qr, { small: true });
+                await updateBotStatus({ status: 'connecting', qr });
+                await logBotEvent('warn', 'QR Code baru terbit. Silakan scan dari terminal server atau web admin.');
+            }
 
             if (connection === 'close') {
                 globalSock = null;
                 const code = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = code !== DisconnectReason.loggedOut;
-                console.log(`⚠️ Koneksi terputus (${code}). Reconnect: ${shouldReconnect}`);
+                await logBotEvent('error', `Koneksi WhatsApp terputus (${code}). Melakukan sambung ulang: ${shouldReconnect}`);
+                
+                let dbStatus = 'disconnected';
+                if (code === DisconnectReason.loggedOut) {
+                    dbStatus = 'disconnected';
+                    try {
+                        const mongoose = require('mongoose');
+                        await mongoose.connection.db.collection('authsessions').deleteMany({});
+                        await logBotEvent('warn', 'Sesi keluar terdeteksi, membersihkan credentials di database.');
+                    } catch (e) {
+                        console.error('Gagal menghapus auth state:', e.message);
+                    }
+                } else {
+                    dbStatus = 'connecting';
+                }
+                
+                await updateBotStatus({ status: dbStatus, qr: '' });
                 isReconnecting = false;
                 if (shouldReconnect) {
-                    console.log('🔄 Reconnect dalam 5 detik...');
                     setTimeout(() => startBot(), 5000);
                 }
             } else if (connection === 'open') {
-                console.log('✅ Bot WhatsApp sudah aktif!');
                 globalSock = sock;
                 isReconnecting = false;
+                const phone = sock.user.id.split(':')[0];
+                const name = sock.user.name || 'RemindMe Bot';
+                await updateBotStatus({
+                    status: 'connected',
+                    qr: '',
+                    phone,
+                    name,
+                    uptime: Date.now() - botStartTime.getTime()
+                });
+                await logBotEvent('info', `Koneksi WhatsApp berhasil tersambung! No: ${phone} (${name})`);
                 setupChangeStream();
             }
         });
@@ -556,18 +732,14 @@ async function startBot() {
             let text = '';
             if (btnResponseId) {
                 text = mapButtonToCommand(btnResponseId);
-                console.log('🔘 Button response:', btnResponseId, '→', text);
             } else if (nativeFlowJson) {
                 let btnId = '';
                 try { btnId = JSON.parse(nativeFlowJson).id || ''; } catch (_) {}
                 text = mapButtonToCommand(btnId);
-                console.log('🔘 NativeFlow response:', nativeFlowJson, '→', text);
             } else if (listResponseId) {
                 text = mapButtonToCommand(listResponseId);
-                console.log('🔘 List response:', listResponseId, '→', text);
             } else if (templateBtnId) {
                 text = mapButtonToCommand(templateBtnId);
-                console.log('🔘 Template response:', templateBtnId, '→', text);
             } else {
                 text = (innerMsg?.conversation || innerMsg?.extendedTextMessage?.text || '').trim();
             }
@@ -577,7 +749,13 @@ async function startBot() {
             const [cmd, ...rest] = text.split(' ');
             const args = rest.join(' ').trim();
 
+            const sender = msg.key.participant || msg.key.remoteJid;
+            const isGroup = jid.endsWith('@g.us');
+            const sourceName = isGroup ? `Grup: ${jid}` : `Pribadi: ${jid}`;
+
             try {
+                await logBotEvent('cmd', `Menjalankan perintah '${cmd}' dari ${sender.split('@')[0]} di ${sourceName}`);
+
                 switch (cmd.toLowerCase()) {
                     case '!menu': case '!help':
                         await cmdMenu(sock, jid); break;
@@ -609,10 +787,12 @@ async function startBot() {
                             { upsert: true }
                         );
                         await sock.sendMessage(jid, { text: '✅ Grup ini akan menerima pengingat otomatis.' });
+                        await logBotEvent('info', `Grup ${gName} diaktifkan untuk pengingat otomatis.`);
                         break;
                     case '!hapusgrup':
                         await Setting.findOneAndDelete({ reminderJid: jid });
                         await sock.sendMessage(jid, { text: '🔕 Pengingat otomatis dimatikan untuk grup ini.' });
+                        await logBotEvent('info', `Grup ${jid} dihapus dari daftar pengingat otomatis.`);
                         break;
                     case '!addcmd':
                         if (!args.includes('|')) {
@@ -630,6 +810,7 @@ async function startBot() {
                                     { upsert: true }
                                 );
                                 await sock.sendMessage(jid, { text: '✅ Custom command *'+newCmd+'* berhasil disimpan untuk grup ini.' });
+                                await logBotEvent('info', `Custom command '${newCmd}' ditambahkan/diperbarui untuk grup ${jid}`);
                             }
                         }
                         break;
@@ -639,7 +820,10 @@ async function startBot() {
                             await sock.sendMessage(jid, { text: '❌ Format: *!delcmd <perintah>*\nContoh: _!delcmd !jadwal_' });
                         } else {
                             const res = await CustomCommand.findOneAndDelete({ jid, command: delCmd });
-                            if (res) await sock.sendMessage(jid, { text: '✅ Custom command *'+delCmd+'* dihapus.' });
+                            if (res) {
+                                await sock.sendMessage(jid, { text: '✅ Custom command *'+delCmd+'* dihapus.' });
+                                await logBotEvent('info', `Custom command '${delCmd}' dihapus dari grup ${jid}`);
+                            }
                             else await sock.sendMessage(jid, { text: '❌ Command *'+delCmd+'* tidak ditemukan di grup ini.' });
                         }
                         break;
@@ -653,15 +837,21 @@ async function startBot() {
                         }
                         break;
                     default:
-                        const custom = await CustomCommand.findOne({ jid, command: cmd.toLowerCase() });
+                        const custom = await CustomCommand.findOne({
+                            $or: [
+                                { jid, command: cmd.toLowerCase() },
+                                { jid: 'global', command: cmd.toLowerCase() }
+                            ]
+                        });
                         if (custom) {
                             await sock.sendMessage(jid, { text: custom.response });
+                            await logBotEvent('cmd', `Custom Command '${cmd}' dipicu oleh ${sender.split('@')[0]} di ${jid}`);
                         } else {
                             await sock.sendMessage(jid, { text: '❓ Perintah tidak dikenali. Ketik *!menu* untuk bantuan.' });
                         }
                 }
             } catch (err) {
-                console.error('❌ Command error:', err);
+                await logBotEvent('error', `Gagal mengeksekusi perintah '${cmd}': ${err.message}`);
                 await sock.sendMessage(jid, { text: '❌ Terjadi kesalahan. Coba lagi nanti.' });
             }
         });

@@ -4,170 +4,420 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RemindMe - Dashboard Pengingat Tugas</title>
-    <meta name="description" content="Dashboard pengingat tugas otomatis terintegrasi WhatsApp">
+    <title>RemindMe Admin - WhatsApp Bot Control Center</title>
+    <meta name="description" content="Control Center premium untuk WhatsApp Reminder Bot">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet">
 </head>
 
 <body>
+    <!-- Background Animated Blobs -->
     <div class="background-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+        <div class="blob blob-indigo"></div>
     </div>
 
-    <div class="container glass-panel">
-        <header>
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <div class="header-title">
-                        <i class="ri-checkbox-multiple-line logo-icon"></i>
-                        <h1>RemindMe <span style="font-size: 0.8rem; color: #ef4444; vertical-align: middle;">ADMIN</span></h1>
+    <!-- App Layout Container -->
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="ri-checkbox-multiple-line logo-icon"></i>
+                    <div class="logo-text">
+                        <h2>RemindMe</h2>
+                        <span class="badge-role">ADMIN PANEL</span>
                     </div>
-                    <p class="subtitle">Manajemen tugas otomatis terintegrasi WhatsApp</p>
                 </div>
-                <button onclick="window.logout()" style="background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.2); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; gap: 6px; align-items: center; font-size: 0.85rem; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.2)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">
-                    <i class="ri-logout-box-r-line"></i> Logout
+            </div>
+
+            <!-- Bot Live Status Card in Sidebar -->
+            <div class="bot-status-card" id="sidebar-bot-card">
+                <div class="status-indicator">
+                    <span class="pulse-dot" id="bot-glow"></span>
+                    <span class="status-text" id="bot-status-txt">Offline</span>
+                </div>
+                <div class="bot-info-lines">
+                    <p><i class="ri-whatsapp-line"></i> <span id="bot-phone">-</span></p>
+                    <p><i class="ri-robot-line"></i> <span id="bot-name">-</span></p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard">
+                    <i class="ri-dashboard-3-line"></i>
+                    <span>Dashboard & Logs</span>
+                </button>
+                <button class="nav-item" data-tab="tasks">
+                    <i class="ri-file-list-3-line"></i>
+                    <span>Kelola Tugas</span>
+                </button>
+                <button class="nav-item" data-tab="groups">
+                    <i class="ri-group-line"></i>
+                    <span>Grup & Broadcast</span>
+                </button>
+                <button class="nav-item" data-tab="commands">
+                    <i class="ri-terminal-box-line"></i>
+                    <span>Custom Commands</span>
+                </button>
+            </nav>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <div class="timezone-info">
+                    <i class="ri-time-line"></i>
+                    <span>Asia/Makassar (WITA)</span>
+                </div>
+                <button onclick="window.logout()" class="btn-logout">
+                    <i class="ri-logout-box-r-line"></i>
+                    <span>Logout</span>
                 </button>
             </div>
-            <div class="timezone-badge">
-                <i class="ri-time-line"></i> Zona Waktu: <b>WITA (Asia/Makassar)</b>
-            </div>
-        </header>
+        </aside>
 
-        <!-- Stats Cards -->
-        <section class="stats-section" id="stats-section">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: rgba(99,102,241,0.15); color: #a5b4fc;">
-                        <i class="ri-file-list-3-line"></i>
+        <!-- Main Viewport -->
+        <main class="main-viewport">
+            <!-- Topbar Header -->
+            <header class="topbar glass-panel">
+                <div class="topbar-left">
+                    <h1 id="view-title">Dashboard & Logs</h1>
+                </div>
+                <div class="topbar-right">
+                    <div class="system-time">
+                        <i class="ri-calendar-2-line"></i>
+                        <span id="real-time-clock">-</span>
                     </div>
-                    <div class="stat-info">
-                        <span class="stat-value" id="stat-total">-</span>
-                        <span class="stat-label">Total</span>
+                    <div class="connection-pill" id="server-connection-health">
+                        <i class="ri-wifi-line"></i>
+                        <span>API Connected</span>
                     </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #6ee7b7;">
-                        <i class="ri-check-double-line"></i>
-                    </div>
-                    <div class="stat-info">
-                        <span class="stat-value" id="stat-completed">-</span>
-                        <span class="stat-label">Selesai</span>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #fcd34d;">
-                        <i class="ri-time-line"></i>
-                    </div>
-                    <div class="stat-info">
-                        <span class="stat-value" id="stat-pending">-</span>
-                        <span class="stat-label">Pending</span>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #fca5a5;">
-                        <i class="ri-alarm-warning-line"></i>
-                    </div>
-                    <div class="stat-info">
-                        <span class="stat-value" id="stat-missed">-</span>
-                        <span class="stat-label">Terlewat</span>
-                    </div>
-                </div>
-            </div>
-            <div class="progress-bar-container">
-                <div class="progress-bar-track">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
-                </div>
-                <span class="progress-label" id="progress-label">0% selesai</span>
-            </div>
-        </section>
+            </header>
 
-        <main>
-            <section class="add-task-section">
-                <h2><i class="ri-add-circle-line"></i> Tambah Tugas Baru</h2>
-                <form id="task-form">
-                    <div class="input-group">
-                        <i class="ri-edit-2-line input-icon"></i>
-                        <input type="text" id="task-name" placeholder="Nama Tugas (Misal: Makalah Sejarah)" required
-                            autocomplete="off">
-                    </div>
-                    <div class="input-group">
-                        <i class="ri-file-text-line input-icon" style="top: 14px;"></i>
-                        <textarea id="task-detail" placeholder="Detail tugas (opsional)" rows="2"></textarea>
-                    </div>
-                    <div class="form-row">
-                        <div class="input-group flex-grow">
-                            <i class="ri-calendar-event-line input-icon"></i>
-                            <input type="datetime-local" id="task-date">
+            <!-- Tab Panels -->
+            <div class="tab-viewport">
+                
+                <!-- 1. DASHBOARD & MONITORING TAB -->
+                <div class="tab-pane active" id="tab-dashboard">
+                    <div class="dashboard-grid">
+                        
+                        <!-- Bot Health Card -->
+                        <div class="dashboard-card glass-panel" id="bot-telemetry-card">
+                            <div class="card-header">
+                                <h3><i class="ri-pulse-line card-icon icon-cyan"></i> WhatsApp Bot Status</h3>
+                                <span class="uptime-badge" id="bot-uptime">Uptime: 0m</span>
+                            </div>
+                            <div class="telemetry-grid">
+                                <div class="tel-item">
+                                    <span class="tel-label">Uptime Bot</span>
+                                    <span class="tel-val" id="tel-uptime">0 hari 0 jam</span>
+                                </div>
+                                <div class="tel-item">
+                                    <span class="tel-label">Phone JID</span>
+                                    <span class="tel-val" id="tel-phone">-</span>
+                                </div>
+                                <div class="tel-item">
+                                    <span class="tel-label">Nama Bot</span>
+                                    <span class="tel-val" id="tel-name">-</span>
+                                </div>
+                                <div class="tel-item">
+                                    <span class="tel-label">Detak Jantung</span>
+                                    <span class="tel-val" id="tel-heartbeat">-</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="input-group priority-group">
-                            <i class="ri-flag-line input-icon"></i>
-                            <select id="task-priority">
-                                <option value="normal">Normal</option>
-                                <option value="high">Tinggi</option>
-                                <option value="low">Rendah</option>
-                            </select>
+
+                        <!-- Manual Cron Controls -->
+                        <div class="dashboard-card glass-panel">
+                            <h3><i class="ri-settings-5-line card-icon icon-purple"></i> Kontrol Aksi Bot</h3>
+                            <p class="card-desc">Picu pengingat cron secara manual atau kelola koneksi bot WhatsApp instan.</p>
+                            <div class="action-buttons-grid">
+                                <button onclick="window.triggerBotAction('morning_reminder')" class="btn-action">
+                                    <i class="ri-sun-line"></i>
+                                    <span>Picu Notif Pagi</span>
+                                </button>
+                                <button onclick="window.triggerBotAction('evening_reminder')" class="btn-action">
+                                    <i class="ri-moon-line"></i>
+                                    <span>Picu Preview Malam</span>
+                                </button>
+                                <button onclick="window.triggerBotAction('critical_reminder')" class="btn-action">
+                                    <i class="ri-alarm-warning-line"></i>
+                                    <span>Cek Tugas Kritis</span>
+                                </button>
+                                <button onclick="window.triggerBotAction('reconnect')" class="btn-action btn-danger-action">
+                                    <i class="ri-refresh-line"></i>
+                                    <span>Paksa Reconnect</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <div style="margin-bottom: 12px; margin-top: -4px;">
-                        <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;"><i class="ri-notification-3-line"></i> Kirim notif ke grup:</p>
-                        <div id="add-group-checkboxes" style="display:flex;flex-direction:column;gap:4px;"></div>
-                    </div>
-                    <button type="submit" class="btn-primary">
-                        <i class="ri-add-line"></i> Tambah Tugas
-                    </button>
-                </form>
-            </section>
 
-            <div class="tabs">
-                <button class="tab-btn active" data-target="pending">
-                    <i class="ri-time-line"></i> Belum Selesai
-                </button>
-                <button class="tab-btn" data-target="completed">
-                    <i class="ri-check-line"></i> Selesai
-                </button>
-                <button class="tab-btn" data-target="settings">
-                    <i class="ri-group-line"></i> Grup
-                </button>
+                    <!-- Dynamic QR Code Scanner Container (Auto-Shown if needed) -->
+                    <div class="qr-container-card glass-panel" id="qr-widget-container" style="display: none;">
+                        <div class="qr-layout">
+                            <div class="qr-info">
+                                <h2><i class="ri-qr-code-line icon-orange animate-pulse"></i> Hubungkan WhatsApp Bot</h2>
+                                <p>Silakan buka WhatsApp di handphone Anda, buka Perangkat Tertaut (Linked Devices), lalu scan QR Code di samping untuk menghubungkan bot pengingat tugas Anda.</p>
+                                <div class="qr-status-badge">
+                                    <i class="ri-loader-4-line spin"></i> Menunggu scan...
+                                </div>
+                            </div>
+                            <div class="qr-image-wrapper">
+                                <img id="whatsapp-qr-image" src="" alt="WhatsApp QR Code">
+                                <div class="qr-overlay" id="qr-loading-overlay">
+                                    <i class="ri-loader-2-line spin"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Logging Terminal -->
+                    <div class="terminal-card glass-panel">
+                        <div class="terminal-header">
+                            <div class="terminal-title">
+                                <i class="ri-terminal-line card-icon"></i>
+                                <h3>Live Activity Feed & Terminal Logs</h3>
+                            </div>
+                            <div class="terminal-actions">
+                                <button onclick="window.copyLogs()" class="btn-terminal" title="Salin Log"><i class="ri-file-copy-line"></i> Salin</button>
+                                <button onclick="window.clearLogsDisplay()" class="btn-terminal" title="Kosongkan Tampilan"><i class="ri-delete-bin-line"></i> Bersihkan</button>
+                            </div>
+                        </div>
+                        <div class="terminal-body" id="log-terminal-feed">
+                            <div class="terminal-line system-msg">[SYSTEM] Melakukan sinkronisasi dengan server...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. TASKS MANAGEMENT TAB -->
+                <div class="tab-pane" id="tab-tasks">
+                    <!-- Stats Grid -->
+                    <section class="stats-section">
+                        <div class="stats-grid">
+                            <div class="stat-card glass-panel">
+                                <div class="stat-icon" style="background: rgba(99,102,241,0.15); color: #a5b4fc;">
+                                    <i class="ri-file-list-3-line"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-total">0</span>
+                                    <span class="stat-label">Total Tugas</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: #6ee7b7;">
+                                    <i class="ri-check-double-line"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-completed">0</span>
+                                    <span class="stat-label">Tugas Selesai</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: #fcd34d;">
+                                    <i class="ri-time-line"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-pending">0</span>
+                                    <span class="stat-label">Tugas Pending</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: #fca5a5;">
+                                    <i class="ri-alarm-warning-line"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-missed">0</span>
+                                    <span class="stat-label">Tugas Terlewat</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-track">
+                                <div class="progress-bar-fill" id="progress-fill"></div>
+                            </div>
+                            <span class="progress-label" id="progress-label">0% selesai</span>
+                        </div>
+                    </section>
+
+                    <!-- Add Task & Task List Container -->
+                    <div class="double-column-grid">
+                        <section class="task-form-panel glass-panel">
+                            <h2><i class="ri-add-circle-line"></i> Tambah Tugas Baru</h2>
+                            <form id="task-form">
+                                <div class="input-group">
+                                    <i class="ri-edit-2-line input-icon"></i>
+                                    <input type="text" id="task-name" placeholder="Nama Tugas (Misal: PR Matematika)" required autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <i class="ri-file-text-line input-icon" style="top: 14px;"></i>
+                                    <textarea id="task-detail" placeholder="Detail tugas / materi pelajaran (opsional)" rows="3"></textarea>
+                                </div>
+                                <div class="form-row">
+                                    <div class="input-group flex-grow">
+                                        <i class="ri-calendar-event-line input-icon"></i>
+                                        <input type="datetime-local" id="task-date">
+                                    </div>
+                                    <div class="input-group priority-group">
+                                        <i class="ri-flag-line input-icon"></i>
+                                        <select id="task-priority">
+                                            <option value="normal">Normal</option>
+                                            <option value="high">Tinggi 🔥</option>
+                                            <option value="low">Rendah 📎</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="group-select-container">
+                                    <p class="select-label"><i class="ri-notification-3-line"></i> Kirim Notifikasi ke Grup WhatsApp:</p>
+                                    <div class="group-checkbox-list" id="add-group-checkboxes">
+                                        <span class="no-groups-hint">Memuat grup...</span>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn-primary">
+                                    <i class="ri-add-line"></i> Tambah & Siarkan Tugas
+                                </button>
+                            </form>
+                        </section>
+
+                        <!-- Task lists with tab controllers inside -->
+                        <section class="task-list-panel glass-panel">
+                            <div class="panel-tab-header">
+                                <button class="inner-tab active" data-list="pending">
+                                    <i class="ri-time-line"></i> Pending
+                                </button>
+                                <button class="inner-tab" data-list="completed">
+                                    <i class="ri-check-line"></i> Selesai
+                                </button>
+                            </div>
+                            <div class="inner-tab-content active" id="list-pending">
+                                <ul id="task-list" class="task-list">
+                                    <div class="empty-state">
+                                        <i class="ri-loader-4-line spin"></i>
+                                        <p>Memuat daftar tugas...</p>
+                                    </div>
+                                </ul>
+                            </div>
+                            <div class="inner-tab-content" id="list-completed">
+                                <ul id="completed-list" class="task-list"></ul>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- 3. GRUPS & BROADCAST TAB -->
+                <div class="tab-pane" id="tab-groups">
+                    <div class="double-column-grid">
+                        <!-- Left column: Connected WhatsApp groups -->
+                        <section class="glass-panel text-column">
+                            <div class="panel-header-desc">
+                                <h2><i class="ri-whatsapp-line icon-cyan"></i> Grup WhatsApp Terhubung</h2>
+                                <p>Daftar grup WhatsApp yang aktif menerima pengingat tugas. Gunakan perintah <b>!setgrup</b> di dalam grup WA untuk menghubungkan grup baru.</p>
+                            </div>
+                            <ul id="group-list" class="task-list">
+                                <div class="empty-state">
+                                    <i class="ri-loader-4-line spin"></i>
+                                    <p>Memuat daftar grup...</p>
+                                </div>
+                            </ul>
+                        </section>
+
+                        <!-- Right column: Send Broadcast message -->
+                        <section class="glass-panel form-column">
+                            <h2><i class="ri-broadcast-line icon-purple"></i> Kirim Broadcast Kustom</h2>
+                            <p class="section-desc">Kirim pesan kustom/pengumuman secara instan ke grup tertentu atau semua grup WhatsApp terdaftar sekaligus dari dashboard web.</p>
+                            
+                            <form id="broadcast-form">
+                                <div class="group-select-container">
+                                    <p class="select-label"><i class="ri-notification-3-line"></i> Target Grup Broadcast:</p>
+                                    <div class="group-checkbox-list" id="broadcast-group-checkboxes">
+                                        <span class="no-groups-hint">Memuat grup...</span>
+                                    </div>
+                                    <div style="margin-top: 6px;">
+                                        <button type="button" onclick="window.selectAllBroadcastGroups(true)" class="btn-small-link">Pilih Semua</button>
+                                        <button type="button" onclick="window.selectAllBroadcastGroups(false)" class="btn-small-link">Bersihkan</button>
+                                    </div>
+                                </div>
+
+                                <div class="input-group">
+                                    <i class="ri-message-3-line input-icon" style="top: 14px;"></i>
+                                    <textarea id="broadcast-message-text" placeholder="Tulis pesan pengumuman di sini..." rows="6" required></textarea>
+                                </div>
+
+                                <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #8b5cf6, #d946ef);">
+                                    <i class="ri-send-plane-line"></i> Kirim Broadcast Instan
+                                </button>
+                            </form>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- 4. CUSTOM COMMANDS TAB -->
+                <div class="tab-pane" id="tab-commands">
+                    <div class="double-column-grid">
+                        
+                        <!-- Left column: Add/Edit custom command -->
+                        <section class="glass-panel form-column">
+                            <h2 id="command-form-title"><i class="ri-terminal-box-line"></i> Buat Custom Command</h2>
+                            <p class="section-desc">Daftarkan perintah otomatis untuk grup. Misalnya ketika anggota mengetik <b>!jadwal</b>, bot akan membalas dengan teks yang Anda tetapkan.</p>
+                            
+                            <form id="custom-command-form">
+                                <input type="hidden" id="command-edit-id">
+                                
+                                <div class="input-group">
+                                    <i class="ri-community-line input-icon"></i>
+                                    <select id="command-target-jid" required>
+                                        <option value="global">Semua Grup (Global)</option>
+                                    </select>
+                                </div>
+
+                                <div class="input-group">
+                                    <i class="ri-code-s-slash-line input-icon"></i>
+                                    <input type="text" id="command-trigger" placeholder="Nama Perintah (Contoh: !jadwal)" required autocomplete="off">
+                                </div>
+
+                                <div class="input-group">
+                                    <i class="ri-question-answer-line input-icon" style="top: 14px;"></i>
+                                    <textarea id="command-response" placeholder="Tulis balasan otomatis bot di sini..." rows="5" required></textarea>
+                                </div>
+
+                                <div class="modal-actions" id="cc-form-actions">
+                                    <button type="submit" class="btn-primary">
+                                        <i class="ri-save-line"></i> Simpan Command
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+
+                        <!-- Right column: List of custom commands -->
+                        <section class="glass-panel text-column">
+                            <div class="commands-header-row">
+                                <h2><i class="ri-list-check-2"></i> Daftar Custom Commands</h2>
+                                <div class="search-box">
+                                    <input type="text" id="search-commands-input" placeholder="Cari perintah..." oninput="window.filterCustomCommands()">
+                                </div>
+                            </div>
+                            <ul id="custom-commands-list" class="task-list" style="margin-top: 12px;">
+                                <div class="empty-state">
+                                    <i class="ri-loader-4-line spin"></i>
+                                    <p>Memuat custom commands...</p>
+                                </div>
+                            </ul>
+                        </section>
+                    </div>
+                </div>
+
             </div>
 
-            <section class="task-list-section">
-                <div id="pending" class="tab-content active">
-                    <ul id="task-list" class="task-list">
-                        <div class="empty-state">
-                            <i class="ri-loader-4-line spin"></i>
-                            <p>Memuat tugas...</p>
-                        </div>
-                    </ul>
-                </div>
-
-                <div id="completed" class="tab-content">
-                    <ul id="completed-list" class="task-list"></ul>
-                </div>
-
-                <div id="settings" class="tab-content">
-                    <div class="settings-header">
-                        <p class="settings-hint"><i class="ri-information-line"></i> Daftar grup yang menerima notifikasi otomatis. Gunakan <b>!setgrup</b> di WhatsApp untuk menambah.</p>
-                    </div>
-                    <ul id="group-list" class="task-list">
-                        <div class="empty-state">
-                            <i class="ri-loader-4-line spin"></i>
-                            <p>Memuat daftar grup...</p>
-                        </div>
-                    </ul>
-                </div>
-            </section>
+            <!-- Footer -->
+            <footer class="app-footer">
+                <p>RemindMe Control Center v2.5 &copy; 2026 | Dibuat dengan Vanilla JS & Mongoose Capped Sync</p>
+            </footer>
         </main>
-
-        <footer>
-            <p>RemindMe Bot v2.0 &copy; 2026</p>
-        </footer>
     </div>
 
-    <!-- Edit Modal -->
+    <!-- Edit Task Modal -->
     <div class="modal-overlay" id="edit-modal">
         <div class="modal glass-panel">
             <h2><i class="ri-pencil-line"></i> Edit Tugas</h2>
@@ -177,7 +427,7 @@
                     <input type="text" id="edit-name" required placeholder="Nama Tugas">
                 </div>
                 <div class="input-group">
-                    <textarea id="edit-detail" placeholder="Detail tugas" rows="2"></textarea>
+                    <textarea id="edit-detail" placeholder="Detail tugas" rows="3"></textarea>
                 </div>
                 <div class="form-row">
                     <div class="input-group flex-grow">
@@ -191,33 +441,55 @@
                         </select>
                     </div>
                 </div>
-                <div style="margin-bottom: 12px; margin-top: -4px;">
-                    <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;"><i class="ri-notification-3-line"></i> Kirim notif ke grup:</p>
-                    <div id="edit-group-checkboxes" style="display:flex;flex-direction:column;gap:4px;"></div>
+                <div class="group-select-container">
+                    <p class="select-label"><i class="ri-notification-3-line"></i> Kirim Notifikasi ke Grup:</p>
+                    <div class="group-checkbox-list" id="edit-group-checkboxes"></div>
                 </div>
                 <div class="modal-actions" id="edit-modal-actions">
                     <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>
-                    <button type="submit" class="btn-primary">Simpan</button>
+                    <button type="submit" class="btn-primary">Simpan Perubahan</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Login Modal -->
-    <div class="modal-overlay active" id="login-modal" style="z-index: 999; background: radial-gradient(circle at 50% 30%, #1e293b 0%, #0f172a 100%);">
+    <!-- Admin Confirm Alert Modal -->
+    <div class="modal-overlay" id="admin-action-modal">
         <div class="modal glass-panel">
-            <h2><i class="ri-lock-password-line"></i> Admin Login</h2>
+            <h2 id="admin-action-title"><i class="ri-alert-line"></i> Konfirmasi</h2>
+            <p id="admin-action-msg" style="color:#cbd5e1;font-size:0.95rem;margin-bottom:15px;line-height:1.5;">Apakah Anda yakin?</p>
+            <div class="input-group" id="admin-action-notify-group" style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+                <input type="checkbox" id="admin-action-notify" checked style="accent-color:#6366f1;width:18px;height:18px;">
+                <label for="admin-action-notify" style="color:#f8fafc;font-size:0.9rem;cursor:pointer;">Kirim notifikasi WhatsApp</label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="document.getElementById('admin-action-modal').classList.remove('active')">Batal</button>
+                <button type="button" class="btn-primary" id="admin-action-confirm" style="background:#ef4444;border-color:#ef4444;">Ya, Jalankan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal overlay -->
+    <div class="modal-overlay active" id="login-modal" style="z-index: 999; background: radial-gradient(circle at 50% 30%, #171d2d 0%, #080c14 100%);">
+        <div class="modal glass-panel" style="max-width: 440px;">
+            <div class="login-header" style="text-align: center; margin-bottom: 25px;">
+                <i class="ri-checkbox-multiple-line logo-icon" style="font-size: 3.5rem; color: #6366f1; text-shadow: 0 0 20px rgba(99, 102, 241, 0.4); display: inline-block; margin-bottom: 12px;"></i>
+                <h2 style="font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg, #a5b4fc, #d946ef); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">RemindMe Control Center</h2>
+                <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 6px;">Autentikasi Sesi Administrator</p>
+            </div>
             <form id="login-form">
                 <div class="input-group">
                     <i class="ri-link-m input-icon"></i>
-                    <input type="url" id="admin-backend-url" required placeholder="Backend URL (contoh: https://app.vercel.app)">
+                    <input type="url" id="admin-backend-url" required placeholder="Backend API URL (contoh: https://app.vercel.app)">
                 </div>
                 <div class="input-group">
                     <i class="ri-key-line input-icon"></i>
-                    <input type="password" id="admin-password" required placeholder="Masukkan Password">
+                    <input type="password" id="admin-password" required placeholder="Masukkan Password Admin">
                 </div>
-                <div class="modal-actions">
-                    <button type="submit" class="btn-primary">Masuk</button>
+                <div class="modal-actions" style="margin-top: 15px;">
+                    <button type="submit" class="btn-primary" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #6366f1, #4f46e5); font-weight: 700;">
+                        <i class="ri-shield-user-line"></i> Masuk ke Dashboard
+                    </button>
                 </div>
             </form>
         </div>

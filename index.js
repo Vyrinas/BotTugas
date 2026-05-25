@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
-const { connectDB, Task, Setting } = require('./database');
+const { connectDB, Task, Setting, CustomCommand, BotStatus, BotLog, BotAction } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -235,6 +235,135 @@ app.delete('/api/settings/:id', verifyXs, async (req, res) => {
         res.json({ message: 'Grup berhasil dihapus' });
     } catch (error) {
         res.status(500).json({ error: 'Gagal menghapus grup' });
+    }
+});
+
+// --- HELPER UNTUK LOG WEB ---
+async function logWebEvent(message) {
+    try {
+        await BotLog.create({ level: 'web', message });
+    } catch (e) {
+        console.error('⚠️ Gagal menyimpan log web:', e.message);
+    }
+}
+
+// --- ADMIN TELEMETRY & CONTROLS ---
+
+app.get('/api/admin/bot-status', verifyXs, async (req, res) => {
+    try {
+        const statusDoc = await BotStatus.findOne();
+        if (!statusDoc) {
+            return res.json({ status: 'disconnected', uptime: 0, qr: '', phone: '', name: '', online: false });
+        }
+        
+        // Cek apakah detak jantung (heartbeat) aktif dalam 60 detik terakhir
+        const now = new Date();
+        const diffSeconds = Math.abs(now - new Date(statusDoc.lastActive)) / 1000;
+        const isOnline = diffSeconds <= 60;
+        
+        res.json({
+            status: isOnline ? statusDoc.status : 'disconnected',
+            uptime: statusDoc.uptime || 0,
+            qr: statusDoc.qr || '',
+            phone: statusDoc.phone || '',
+            name: statusDoc.name || '',
+            online: isOnline
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengambil status bot' });
+    }
+});
+
+app.get('/api/admin/logs', verifyXs, async (req, res) => {
+    try {
+        const logs = await BotLog.find().sort({ timestamp: -1 }).limit(50);
+        // Balikkan urutan agar log paling lama di atas dan paling baru di bawah (gaya terminal)
+        res.json(logs.reverse());
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengambil logs' });
+    }
+});
+
+app.post('/api/admin/action', verifyXs, async (req, res) => {
+    const { action, params } = req.body;
+    if (!action) return res.status(400).json({ error: 'Aksi wajib diisi' });
+    
+    try {
+        const botAction = await BotAction.create({ action, params, status: 'pending' });
+        await logWebEvent(`Mengirim perintah kendali '${action}' ke WhatsApp bot via Web Dashboard`);
+        res.status(201).json({ message: 'Aksi dikirim', botAction });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengirim aksi' });
+    }
+});
+
+// --- ADMIN CUSTOM COMMANDS MANAGEMENT ---
+
+app.get('/api/admin/custom-commands', verifyXs, async (req, res) => {
+    try {
+        const cmds = await CustomCommand.find().sort({ command: 1 });
+        res.json(cmds);
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengambil custom commands' });
+    }
+});
+
+app.post('/api/admin/custom-commands', verifyXs, async (req, res) => {
+    const { jid, command, response } = req.body;
+    if (!jid || !command || !response) {
+        return res.status(400).json({ error: 'JID, perintah, dan balasan wajib diisi' });
+    }
+    
+    const cleanCmd = command.trim().toLowerCase();
+    if (!cleanCmd.startsWith('!')) {
+        return res.status(400).json({ error: 'Perintah harus diawali dengan tanda seru (!)' });
+    }
+    
+    try {
+        const exists = await CustomCommand.findOne({ jid, command: cleanCmd });
+        if (exists) {
+            return res.status(400).json({ error: `Perintah '${cleanCmd}' sudah ada untuk target ini.` });
+        }
+        
+        const cc = await CustomCommand.create({ jid, command: cleanCmd, response });
+        await logWebEvent(`Menambahkan Custom Command '${cleanCmd}' untuk target '${jid}' via Web`);
+        res.status(201).json({ message: 'Custom command berhasil ditambahkan', customCommand: cc });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal menambah custom command' });
+    }
+});
+
+app.put('/api/admin/custom-commands/:id', verifyXs, async (req, res) => {
+    const { jid, command, response } = req.body;
+    try {
+        const cleanCmd = command ? command.trim().toLowerCase() : undefined;
+        if (cleanCmd && !cleanCmd.startsWith('!')) {
+            return res.status(400).json({ error: 'Perintah harus diawali dengan tanda seru (!)' });
+        }
+        
+        const updated = await CustomCommand.findByIdAndUpdate(
+            req.params.id,
+            { jid, command: cleanCmd, response },
+            { new: true }
+        );
+        await logWebEvent(`Mengedit Custom Command '${cleanCmd || req.params.id}' via Web`);
+        res.json({ message: 'Custom command berhasil diedit', customCommand: updated });
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal mengupdate custom command' });
+    }
+});
+
+app.delete('/api/admin/custom-commands/:id', verifyXs, async (req, res) => {
+    try {
+        const deleted = await CustomCommand.findByIdAndDelete(req.params.id);
+        if (deleted) {
+            await logWebEvent(`Menghapus Custom Command '${deleted.command}' via Web`);
+            res.json({ message: 'Custom command berhasil dihapus' });
+        } else {
+            res.status(404).json({ error: 'Custom command tidak ditemukan' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'Gagal menghapus custom command' });
     }
 });
 
