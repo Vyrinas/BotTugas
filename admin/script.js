@@ -1,6 +1,7 @@
-const API_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/tasks' : '/api/tasks';
-const STATS_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/stats' : '/api/stats';
-const SETTINGS_URL = (window.location.port === '5500' || window.location.port === '5501') ? 'http://localhost:3000/api/settings' : '/api/settings';
+let BACKEND_URL = localStorage.getItem('backend_url') || '';
+let API_URL = BACKEND_URL ? `${BACKEND_URL}/api/tasks` : '';
+let STATS_URL = BACKEND_URL ? `${BACKEND_URL}/api/stats` : '';
+let SETTINGS_URL = BACKEND_URL ? `${BACKEND_URL}/api/settings` : '';
 
 let tasks = [];
 
@@ -20,7 +21,10 @@ const editForm = document.getElementById('edit-form');
 
 document.addEventListener('DOMContentLoaded', () => {
     const _xs = localStorage.getItem('_xs');
-    if (!_xs) {
+    const bUrl = localStorage.getItem('backend_url');
+    if (bUrl) document.getElementById('admin-backend-url').value = bUrl;
+    
+    if (!_xs || !bUrl) {
         document.getElementById('login-modal').classList.add('active');
     } else {
         document.getElementById('login-modal').classList.remove('active');
@@ -31,16 +35,26 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
         const p = document.getElementById('admin-password').value;
-        fetch('/api/v1/sync', { method: 'POST', body: JSON.stringify({ k: p }), headers: { 'Content-Type': 'application/json' } })
+        const inputUrl = document.getElementById('admin-backend-url').value.replace(/\/$/, '');
+        
+        fetch(`${inputUrl}/api/v1/sync`, { method: 'POST', body: JSON.stringify({ k: p }), headers: { 'Content-Type': 'application/json' } })
         .then(r => r.json()).then(d => { 
             if (d.t) { 
-                localStorage.setItem('_xs', d.t); 
+                localStorage.setItem('_xs', d.t);
+                localStorage.setItem('backend_url', inputUrl);
+                BACKEND_URL = inputUrl;
+                API_URL = `${BACKEND_URL}/api/tasks`;
+                STATS_URL = `${BACKEND_URL}/api/stats`;
+                SETTINGS_URL = `${BACKEND_URL}/api/settings`;
+                
                 document.getElementById('login-modal').classList.remove('active');
                 fetchTasks();
                 fetchGroups();
             } else { 
-                alert('Password salah!'); 
+                alert('Password atau URL salah!'); 
             } 
+        }).catch(err => {
+            alert('Gagal terhubung ke Backend URL!');
         });
     });
 });
