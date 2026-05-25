@@ -823,11 +823,12 @@ form {
 .form-row {
     display: flex;
     gap: 16px;
+    flex-wrap: wrap;
 }
 
 .flex-grow {
     flex: 1;
-    min-width: 0;
+    min-width: 220px;
 }
 
 .priority-group {
