@@ -344,22 +344,37 @@ async function cmdTambah(sock, jid, args) {
 }
 
 async function cmdSelesai(sock, jid, args) {
-    const num = parseInt(args);
-    if (!num || num < 1) {
-        await sock.sendMessage(jid, { text: '❌ Format: *!selesai <nomor>*\nContoh: _!selesai 1_\n\nKetik *!list* untuk melihat nomor tugas.' });
+    if (!args) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!selesai <nomor>*\nBisa lebih dari satu: *!selesai 1, 3, 5*\n\nKetik *!list* untuk melihat nomor tugas.' });
+        return;
+    }
+    const nums = args.split(/[, \n]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n > 0);
+    if (nums.length === 0) {
+        await sock.sendMessage(jid, { text: '❌ Format tidak valid. Harap masukkan nomor tugas.' });
         return;
     }
     const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
-    const task = tasks[num - 1];
-    if (!task) {
-        await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
+    
+    const uniqueNums = [...new Set(nums)].sort((a, b) => b - a);
+    const completedNames = [];
+    
+    for (const num of uniqueNums) {
+        const task = tasks[num - 1];
+        if (task) {
+            await Task.findByIdAndUpdate(task._id, { status: 'completed', completedAt: new Date() });
+            completedNames.push(task.name);
+        }
+    }
+    
+    if (completedNames.length === 0) {
+        await sock.sendMessage(jid, { text: `❌ Tugas tidak ditemukan.` });
         return;
     }
-    await Task.findByIdAndUpdate(task._id, { status: 'completed', completedAt: new Date() });
-    const remaining = tasks.length - 1;
+    
+    const remaining = tasks.length - completedNames.length;
     await sendButtons(sock, jid,
-        `🎉 *${task.name}* telah diselesaikan!\n\n⏳ Sisa tugas aktif: ${remaining}`,
+        `🎉 *${completedNames.reverse().join(', ')}* telah diselesaikan!\n\n⏳ Sisa tugas aktif: ${remaining}`,
         [
             { id: 'btn_list', displayText: '📋 Lihat Daftar' },
             { id: 'btn_stats', displayText: '📊 Statistik' },
@@ -370,21 +385,36 @@ async function cmdSelesai(sock, jid, args) {
 }
 
 async function cmdHapus(sock, jid, args) {
-    const num = parseInt(args);
-    if (!num || num < 1) {
-        await sock.sendMessage(jid, { text: '❌ Format: *!hapus <nomor>*\nContoh: _!hapus 1_' });
+    if (!args) {
+        await sock.sendMessage(jid, { text: '❌ Format: *!hapus <nomor>*\nBisa lebih dari satu: *!hapus 1, 3, 5*' });
+        return;
+    }
+    const nums = args.split(/[, \n]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n > 0);
+    if (nums.length === 0) {
+        await sock.sendMessage(jid, { text: '❌ Format tidak valid.' });
         return;
     }
     const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
-    const task = tasks[num - 1];
-    if (!task) {
-        await sock.sendMessage(jid, { text: `❌ Tugas #${num} tidak ditemukan.` });
+    
+    const uniqueNums = [...new Set(nums)].sort((a, b) => b - a);
+    const deletedNames = [];
+    
+    for (const num of uniqueNums) {
+        const task = tasks[num - 1];
+        if (task) {
+            await Task.findByIdAndDelete(task._id);
+            deletedNames.push(task.name);
+        }
+    }
+    
+    if (deletedNames.length === 0) {
+        await sock.sendMessage(jid, { text: `❌ Tugas tidak ditemukan.` });
         return;
     }
-    await Task.findByIdAndDelete(task._id);
+    
     await sendButtons(sock, jid,
-        `🗑️ *${task.name}* telah dihapus.`,
+        `🗑️ *${deletedNames.reverse().join(', ')}* telah dihapus.`,
         [
             { id: 'btn_list', displayText: '📋 Lihat Daftar' },
             { id: 'btn_menu', displayText: '📋 Menu' }
