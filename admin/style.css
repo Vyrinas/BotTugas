@@ -1103,12 +1103,16 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     font-weight: 600;
     font-size: 1rem;
     color: #f1f5f9;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .task-detail {
     font-size: 0.83rem;
     color: #cbd5e1;
     line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .task-date {

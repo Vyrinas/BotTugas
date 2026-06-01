@@ -142,8 +142,8 @@ button { cursor: pointer; border: none; font-size: 0.95rem; font-weight: 600; bo
 .task-item.task-urgent { border-left: 3px solid var(--danger); }
 .task-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .task-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.task-name { font-weight: 600; font-size: 1rem; }
-.task-detail { font-size: 0.83rem; color: #cbd5e1; margin-bottom: 2px; }
+.task-name { font-weight: 600; font-size: 1rem; word-break: break-word; overflow-wrap: anywhere; }
+.task-detail { font-size: 0.83rem; color: #cbd5e1; margin-bottom: 2px; word-break: break-word; overflow-wrap: anywhere; }
 .task-date { font-size: 0.83rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 /* Badges */
