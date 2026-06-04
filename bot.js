@@ -334,6 +334,18 @@ async function cmdTambah(sock, jid, args) {
             return;
         }
     }
+
+    // Cek duplikat: tugas dengan nama yang sama dan belum selesai
+    const existing = await Task.findOne({
+        name: { $regex: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
+        status: { $ne: 'completed' },
+        $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}]
+    });
+    if (existing) {
+        await sock.sendMessage(jid, { text: `⚠️ Tugas *"${existing.name}"* sudah ada dan belum selesai!\nGunakan *!list* untuk melihat daftar tugas.` });
+        return;
+    }
+
     const task = await Task.create({ name, deadline, detail, status: 'pending', priority: 'normal', targetGroups: [jid] });
     const time = getTimeRemaining(deadline);
     const body = `✅ *Tugas berhasil ditambahkan!*\n──────────────────\n*Nama:* ${name}\n*Deadline:* ${formatDeadline(deadline)}\n*Sisa:* ${time.label} ${time.text}\n*Detail:* ${detail || '-'}`;

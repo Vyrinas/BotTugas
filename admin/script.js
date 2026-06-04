@@ -644,7 +644,7 @@ document.getElementById('task-form').addEventListener('submit', async (e) => {
     const tgs = getSelectedCheckboxes('add-group-checkboxes');
     
     try {
-        await fetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify({ 
@@ -656,6 +656,11 @@ document.getElementById('task-form').addEventListener('submit', async (e) => {
                 silent: tgs.length === 0 
             })
         });
+        if (res.status === 409) {
+            const data = await res.json();
+            alert(data.error || 'Tugas duplikat sudah ada!');
+            return;
+        }
         document.getElementById('task-form').reset();
         document.getElementById('task-priority').value = 'normal';
         fetchTasks();

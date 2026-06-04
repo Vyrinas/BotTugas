@@ -126,6 +126,19 @@ app.post('/api/tasks', async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Nama tugas wajib diisi' });
 
     try {
+        // Cek duplikat
+        const dupeQuery = {
+            name: { $regex: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') },
+            status: { $ne: 'completed' }
+        };
+        if (Array.isArray(targetGroups) && targetGroups.length > 0) {
+            dupeQuery.$or = targetGroups.map(g => ({ targetGroups: g }));
+        }
+        const existing = await Task.findOne(dupeQuery);
+        if (existing) {
+            return res.status(409).json({ error: `Tugas "${existing.name}" sudah ada dan belum selesai.` });
+        }
+
         const task = await Task.create({
             name,
             deadline: date || '',

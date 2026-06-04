@@ -67,11 +67,16 @@ taskForm.addEventListener('submit', async (e) => {
     const detail = document.getElementById('task-detail').value;
     const priority = document.getElementById('task-priority').value;
     try {
-        await fetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, date, detail, priority, targetGroups: ['120363407413763307@g.us'], silent: false })
         });
+        if (res.status === 409) {
+            const data = await res.json();
+            alert(data.error || 'Tugas duplikat sudah ada!');
+            return;
+        }
         taskForm.reset();
         document.getElementById('task-priority').value = 'normal';
         fetchTasks();
