@@ -157,18 +157,17 @@ app.post('/api/tasks', async (req, res) => {
 app.put('/api/tasks/:id', async (req, res) => {
     const { name, date, detail, priority, silent, targetGroups } = req.body;
     try {
-        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
-        const id = parseInt(req.params.id);
-        if (tasks[id]) {
+        const task = await Task.findOne({ _id: req.params.id, status: { $ne: 'deleted' } });
+        if (task) {
             const updateData = {
                 name,
                 deadline: date || '',
-                detail: detail !== undefined ? detail : tasks[id].detail,
-                priority: priority || tasks[id].priority || 'normal',
-                silent: silent !== undefined ? silent : tasks[id].silent
+                detail: detail !== undefined ? detail : task.detail,
+                priority: priority || task.priority || 'normal',
+                silent: silent !== undefined ? silent : task.silent
             };
             if (Array.isArray(targetGroups)) updateData.targetGroups = targetGroups;
-            await Task.findByIdAndUpdate(tasks[id]._id, updateData);
+            await Task.findByIdAndUpdate(task._id, updateData);
             res.json({ message: 'Tugas diedit' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });
@@ -181,13 +180,12 @@ app.put('/api/tasks/:id', async (req, res) => {
 app.patch('/api/tasks/:id', async (req, res) => {
     const { status, silent } = req.body;
     try {
-        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
-        const id = parseInt(req.params.id);
-        if (tasks[id]) {
+        const task = await Task.findOne({ _id: req.params.id, status: { $ne: 'deleted' } });
+        if (task) {
             const update = { status };
             if (silent !== undefined) update.silent = silent;
             if (status === 'completed') update.completedAt = new Date();
-            await Task.findByIdAndUpdate(tasks[id]._id, update);
+            await Task.findByIdAndUpdate(task._id, update);
             res.json({ message: 'Status diupdate' });
         } else {
             res.status(404).json({ error: 'Tidak ditemukan' });
@@ -200,13 +198,12 @@ app.patch('/api/tasks/:id', async (req, res) => {
 app.delete('/api/tasks/:id', verifyXs, async (req, res) => {
     try {
         const silent = req.query.silent === 'true';
-        const tasks = await Task.find({ status: { $ne: 'deleted' } }).sort({ createdAt: 1 });
-        const id = parseInt(req.params.id);
-        if (tasks[id]) {
+        const task = await Task.findOne({ _id: req.params.id, status: { $ne: 'deleted' } });
+        if (task) {
             if (silent) {
-                await Task.findByIdAndUpdate(tasks[id]._id, { status: 'deleted', silent: true });
+                await Task.findByIdAndUpdate(task._id, { status: 'deleted', silent: true });
             } else {
-                await Task.findByIdAndDelete(tasks[id]._id);
+                await Task.findByIdAndDelete(task._id);
             }
             res.json({ message: 'Dihapus' });
         } else {

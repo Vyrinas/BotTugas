@@ -159,7 +159,7 @@ _!tambah PR Matematika | 2026-05-20T08:00 | Hal 45-50_`;
 }
 
 async function cmdList(sock, jid) {
-    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const q = { status: { $nin: ['completed', 'deleted'] }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
     if (tasks.length === 0) {
         await sendButtons(sock, jid,
@@ -170,7 +170,7 @@ async function cmdList(sock, jid) {
         return;
     }
 
-    const allQ = { $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const allQ = { status: { $ne: 'deleted' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const allTasks = await Task.find(allQ).sort({ createdAt: 1 });
     const completed = allTasks.filter(t => t.status === 'completed').length;
 
@@ -210,7 +210,7 @@ async function cmdDetail(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format: *!detail <nomor>*\nContoh: _!detail 1_' });
         return;
     }
-    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const q = { status: { $nin: ['completed', 'deleted'] }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
     const task = tasks[num - 1];
     if (!task) {
@@ -365,9 +365,9 @@ async function cmdSelesai(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format tidak valid. Harap masukkan nomor tugas.' });
         return;
     }
-    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const q = { status: { $nin: ['completed', 'deleted'] }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
-    
+
     const uniqueNums = [...new Set(nums)].sort((a, b) => b - a);
     const completedNames = [];
     
@@ -406,9 +406,9 @@ async function cmdHapus(sock, jid, args) {
         await sock.sendMessage(jid, { text: '❌ Format tidak valid.' });
         return;
     }
-    const q = { status: { $ne: 'completed' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const q = { status: { $nin: ['completed', 'deleted'] }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const tasks = await Task.find(q).sort({ createdAt: 1 });
-    
+
     const uniqueNums = [...new Set(nums)].sort((a, b) => b - a);
     const deletedNames = [];
     
@@ -436,7 +436,7 @@ async function cmdHapus(sock, jid, args) {
 }
 
 async function cmdStats(sock, jid) {
-    const q = { $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
+    const q = { status: { $ne: 'deleted' }, $or: [{targetGroups: jid}, {targetGroups: {$size: 0}}, {targetGroups: {$exists: false}}] };
     const all = await Task.find(q);
     const completed = all.filter(t => t.status === 'completed');
     const pending = all.filter(t => t.status !== 'completed');

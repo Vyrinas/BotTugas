@@ -704,7 +704,6 @@ function renderTasks() {
         taskList.innerHTML = `<div class="empty-state"><i class="ri-checkbox-circle-line"></i><p>Hebat! Tidak ada tugas pending.</p></div>`;
     } else {
         taskList.innerHTML = pendingTasks.map((task) => {
-            const realIndex = tasks.indexOf(task);
             const timeInfo = getTimeRemaining(task.date || task.deadline);
             let dateFmt = 'Tanpa deadline';
             const targetDateStr = task.date || task.deadline;
@@ -726,7 +725,7 @@ function renderTasks() {
                 : '<div class="task-groups-badge-list"><span class="group-badge" style="color:#a5b4fc;border-color:rgba(99,102,241,0.15);background:rgba(99,102,241,0.05);"><i class="ri-global-line"></i> Global Broadcast</span></div>';
 
             return `
-                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-index="${realIndex}">
+                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-id="${task._id}">
                     <div class="task-info">
                         <div class="task-name-row"><span class="task-name">${esc(task.name)}</span>${priorityBadge(task.priority)}</div>
                         ${detailHtml}
@@ -734,9 +733,9 @@ function renderTasks() {
                         ${groupsHtml}
                     </div>
                     <div class="task-actions">
-                        <button class="action-btn btn-complete" onclick="window.completeTask(${realIndex})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
-                        <button class="action-btn btn-edit" onclick="window.openEditModal(${realIndex})" title="Edit"><i class="ri-pencil-line"></i></button>
-                        <button class="action-btn btn-delete" onclick="window.extDeleteTask(${realIndex})" title="Hapus"><i class="ri-delete-bin-line"></i></button>
+                        <button class="action-btn btn-complete" onclick="window.completeTask('${task._id}')" title="Tandai Selesai"><i class="ri-check-line"></i></button>
+                        <button class="action-btn btn-edit" onclick="window.openEditModal('${task._id}')" title="Edit"><i class="ri-pencil-line"></i></button>
+                        <button class="action-btn btn-delete" onclick="window.extDeleteTask('${task._id}')" title="Hapus"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
@@ -746,18 +745,17 @@ function renderTasks() {
         completedList.innerHTML = `<div class="empty-state"><i class="ri-ghost-line"></i><p>Belum ada tugas diselesaikan.</p></div>`;
     } else {
         completedList.innerHTML = compTasks.map((task) => {
-            const realIndex = tasks.findIndex(t => t === task);
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
-                <li class="task-item completed" data-index="${realIndex}">
+                <li class="task-item completed" data-id="${task._id}">
                     <div class="task-info">
                         <span class="task-name">${esc(task.name)}</span>
                         ${detailHtml}
                         <div class="task-date"><i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}</div>
                     </div>
                     <div class="task-actions">
-                        <button class="action-btn btn-delete" onclick="window.extDeleteTask(${realIndex})" title="Hapus Permanen"><i class="ri-delete-bin-line"></i></button>
+                        <button class="action-btn btn-delete" onclick="window.extDeleteTask('${task._id}')" title="Hapus Permanen"><i class="ri-delete-bin-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
@@ -768,9 +766,10 @@ function renderTasks() {
 const editModal = document.getElementById('edit-modal');
 const editForm = document.getElementById('edit-form');
 
-window.openEditModal = function(index) {
-    const task = tasks[index];
-    document.getElementById('edit-id').value = index;
+window.openEditModal = function(id) {
+    const task = tasks.find(t => t._id === id);
+    if (!task) return;
+    document.getElementById('edit-id').value = id;
     document.getElementById('edit-name').value = task.name;
     document.getElementById('edit-date').value = task.date || task.deadline || '';
     document.getElementById('edit-detail').value = task.detail || '';
@@ -823,8 +822,8 @@ editForm.addEventListener('submit', async (e) => {
 });
 
 // Delete task
-window.extDeleteTask = function(index) {
-    const task = tasks[index];
+window.extDeleteTask = function(id) {
+    const task = tasks.find(t => t._id === id);
     if (!task) return;
     
     window.showAdminModal(
@@ -834,7 +833,7 @@ window.extDeleteTask = function(index) {
         '#f43f5e', 
         async (silent) => {
             try {
-                const res = await fetch(`${API_URL}/${index}?silent=${silent}`, { 
+                const res = await fetch(`${API_URL}/${id}?silent=${silent}`, { 
                     method: 'DELETE', 
                     headers: getAuthHeaders() 
                 });
@@ -847,8 +846,8 @@ window.extDeleteTask = function(index) {
 };
 
 // Complete task
-window.completeTask = async function(index) {
-    const task = tasks[index];
+window.completeTask = async function(id) {
+    const task = tasks.find(t => t._id === id);
     if (!task) return;
 
     window.showAdminModal(
@@ -858,7 +857,7 @@ window.completeTask = async function(index) {
         '#10b981', 
         async (silent) => {
             try {
-                await fetch(`${API_URL}/${index}`, { 
+                await fetch(`${API_URL}/${id}`, { 
                     method: 'PATCH', 
                     headers: getAuthHeaders(),
                     body: JSON.stringify({ status: 'completed', silent }) 

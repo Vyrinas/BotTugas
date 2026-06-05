@@ -118,7 +118,6 @@ window.renderTasks = function() {
         taskList.innerHTML = `<div class="empty-state"><i class="ri-check-double-line"></i><p>Hore! Tidak ada tugas yang belum selesai.</p></div>`;
     } else {
         taskList.innerHTML = pendingTasks.map((task) => {
-            const realIndex = tasks.indexOf(task);
             const timeInfo = getTimeRemaining(task.date || task.deadline);
             let dateFmt = 'Belum ada batas waktu';
             const targetDateStr = task.date || task.deadline;
@@ -134,15 +133,15 @@ window.renderTasks = function() {
             }
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             return `
-                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-index="${realIndex}">
+                <li class="task-item ${timeInfo.class === 'urgent' ? 'task-urgent' : ''}" data-id="${task._id}">
                     <div class="task-info">
                         <div class="task-name-row"><span class="task-name">${esc(task.name)}</span>${priorityBadge(task.priority)}</div>
                         ${detailHtml}
                         <div class="task-date"><i class="ri-calendar-2-line"></i> ${dateFmt} <span class="badge ${timeInfo.class}">${timeInfo.text}</span></div>
                     </div>
                     <div class="task-actions">
-                        <button class="action-btn btn-complete" onclick="window.completeTask(${realIndex})" title="Tandai Selesai"><i class="ri-check-line"></i></button>
-                        <button class="action-btn btn-edit" onclick="window.openEditModal(${realIndex})" title="Edit"><i class="ri-pencil-line"></i></button>
+                        <button class="action-btn btn-complete" onclick="window.completeTask('${task._id}')" title="Tandai Selesai"><i class="ri-check-line"></i></button>
+                        <button class="action-btn btn-edit" onclick="window.openEditModal('${task._id}')" title="Edit"><i class="ri-pencil-line"></i></button>
                     </div>
                 </li>`;
         }).join('');
@@ -152,11 +151,10 @@ window.renderTasks = function() {
         completedList.innerHTML = `<div class="empty-state"><i class="ri-ghost-line"></i><p>Belum ada tugas yang diselesaikan.</p></div>`;
     } else {
         completedList.innerHTML = compTasks.map((task) => {
-            const realIndex = tasks.findIndex(t => t === task);
             const detailHtml = task.detail ? `<div class="task-detail">${esc(task.detail)}</div>` : '';
             const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString('id-ID', { timeZone: 'Asia/Makassar', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
-                <li class="task-item completed" data-index="${realIndex}">
+                <li class="task-item completed" data-id="${task._id}">
                     <div class="task-info">
                         <span class="task-name">${esc(task.name)}</span>${detailHtml}
                         <div class="task-date"><i class="ri-check-double-line"></i> Selesai${completedDate ? ' \u2014 ' + completedDate : ''}</div>
@@ -167,10 +165,10 @@ window.renderTasks = function() {
     }
 };
 
-window.completeTask = async function(index) {
+window.completeTask = async function(id) {
     if (confirm('Tandai tugas ini sebagai selesai?')) {
         try {
-            await fetch(`${API_URL}/${index}`, {
+            await fetch(`${API_URL}/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'completed' })
@@ -180,9 +178,10 @@ window.completeTask = async function(index) {
     }
 };
 
-window.openEditModal = function(index) {
-    const task = tasks[index];
-    document.getElementById('edit-id').value = index;
+window.openEditModal = function(id) {
+    const task = tasks.find(t => t._id === id);
+    if (!task) return;
+    document.getElementById('edit-id').value = id;
     document.getElementById('edit-name').value = task.name;
     document.getElementById('edit-date').value = task.date || task.deadline || '';
     document.getElementById('edit-detail').value = task.detail || '';
