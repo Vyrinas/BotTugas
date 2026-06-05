@@ -415,7 +415,7 @@ async function cmdHapus(sock, jid, args) {
     for (const num of uniqueNums) {
         const task = tasks[num - 1];
         if (task) {
-            await Task.findByIdAndDelete(task._id);
+            await Task.findByIdAndUpdate(task._id, { status: 'deleted' });
             deletedNames.push(task.name);
         }
     }
