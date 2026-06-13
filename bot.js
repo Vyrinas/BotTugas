@@ -10,6 +10,7 @@ const { useMongoDBAuthState } = require('./mongoAuthState');
 let globalSock = null;
 let activeChangeStream = null;
 let isReconnecting = false;
+let bot405Retried = false;
 const botStartTime = new Date();
 
 // Helper untuk log ke MongoDB Atlas
@@ -705,9 +706,11 @@ function setupBotActionStream() {
                     }
                 } else if (actionDoc.action === 'reconnect') {
                     await logBotEvent('warn', 'Mengeksekusi instruksi Paksa Reconnect...');
+                    bot405Retried = false;
                     if (globalSock) {
                         globalSock.end(new Error('Manual reconnect request'));
                     } else {
+                        isReconnecting = false;
                         startBot();
                     }
                 } else if (actionDoc.action === 'broadcast') {
@@ -812,25 +815,31 @@ async function startBot() {
                     try {
                         const mongoose = require('mongoose');
                         await mongoose.connection.db.collection('authsessions').deleteMany({});
-                        await logBotEvent('warn', 'Sesi keluar/expired terdeteksi, membersihkan credentials di database. Silakan scan QR baru.');
+                        await logBotEvent('warn', 'Sesi expired/logout terdeteksi. Credentials dihapus. Menunggu scan QR baru...');
                     } catch (e) {
                         console.error('Gagal menghapus auth state:', e.message);
                     }
+                    // Restart sekali saja agar QR baru muncul
+                    if (!bot405Retried) {
+                        bot405Retried = true;
+                        await updateBotStatus({ status: 'connecting', qr: '' });
+                        isReconnecting = false;
+                        setTimeout(() => startBot(), 3000);
+                    } else {
+                        await logBotEvent('warn', 'Menunggu scan QR dari admin panel atau tombol Paksa Reconnect.');
+                        await updateBotStatus({ status: 'disconnected', qr: '' });
+                        isReconnecting = false;
+                    }
                 } else {
                     dbStatus = 'connecting';
-                }
-                
-                await updateBotStatus({ status: dbStatus, qr: '' });
-                isReconnecting = false;
-                if (isLoggedOut) {
-                    // Restart agar QR baru muncul
-                    setTimeout(() => startBot(), 3000);
-                } else if (shouldReconnect) {
+                    await updateBotStatus({ status: dbStatus, qr: '' });
+                    isReconnecting = false;
                     setTimeout(() => startBot(), 5000);
                 }
             } else if (connection === 'open') {
                 globalSock = sock;
                 isReconnecting = false;
+                bot405Retried = false;
                 const phone = sock.user.id.split(':')[0];
                 const name = sock.user.name || 'RemindMe Bot';
                 await updateBotStatus({
