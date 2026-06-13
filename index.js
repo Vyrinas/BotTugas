@@ -339,7 +339,7 @@ app.put('/api/admin/custom-commands/:id', verifyXs, async (req, res) => {
         const updated = await CustomCommand.findByIdAndUpdate(
             req.params.id,
             { jid, command: cleanCmd, response },
-            { new: true }
+            { returnDocument: 'after' }
         );
         await logWebEvent(`Mengedit Custom Command '${cleanCmd || req.params.id}' via Web`);
         res.json({ message: 'Custom command berhasil diedit', customCommand: updated });

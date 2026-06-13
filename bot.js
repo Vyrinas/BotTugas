@@ -29,7 +29,7 @@ async function updateBotStatus(data) {
         await BotStatus.findOneAndUpdate(
             {},
             { ...data, lastActive: new Date() },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
     } catch (e) {
         console.error('⚠️ Gagal memperbarui status bot:', e.message);
