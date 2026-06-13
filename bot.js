@@ -802,16 +802,17 @@ async function startBot() {
             if (connection === 'close') {
                 globalSock = null;
                 const code = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = code !== DisconnectReason.loggedOut;
+                const isLoggedOut = code === DisconnectReason.loggedOut || code === 405;
+                const shouldReconnect = !isLoggedOut;
                 await logBotEvent('error', `Koneksi WhatsApp terputus (${code}). Melakukan sambung ulang: ${shouldReconnect}`);
                 
                 let dbStatus = 'disconnected';
-                if (code === DisconnectReason.loggedOut) {
+                if (isLoggedOut) {
                     dbStatus = 'disconnected';
                     try {
                         const mongoose = require('mongoose');
                         await mongoose.connection.db.collection('authsessions').deleteMany({});
-                        await logBotEvent('warn', 'Sesi keluar terdeteksi, membersihkan credentials di database.');
+                        await logBotEvent('warn', 'Sesi keluar/expired terdeteksi, membersihkan credentials di database. Silakan scan QR baru.');
                     } catch (e) {
                         console.error('Gagal menghapus auth state:', e.message);
                     }
@@ -821,7 +822,10 @@ async function startBot() {
                 
                 await updateBotStatus({ status: dbStatus, qr: '' });
                 isReconnecting = false;
-                if (shouldReconnect) {
+                if (isLoggedOut) {
+                    // Restart agar QR baru muncul
+                    setTimeout(() => startBot(), 3000);
+                } else if (shouldReconnect) {
                     setTimeout(() => startBot(), 5000);
                 }
             } else if (connection === 'open') {
