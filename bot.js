@@ -1030,6 +1030,4 @@ cron.schedule('0 21 * * *', async () => {
     if (globalSock) await broadcastReminder(globalSock, null, 'evening');
 }, { timezone: "Asia/Makassar" });
 
-// TEMPORARY DISABLED — scan QR dulu dari lokal, lalu aktifkan kembali
-// startBot();
-console.log('⏸️  Bot WhatsApp dimatikan sementara untuk proses scan QR lokal.');
+startBot();
