@@ -788,7 +788,8 @@ async function startBot() {
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: true,
-            logger: pino({ level: 'silent' })
+            logger: pino({ level: 'silent' }),
+            version: [2, 3000, 1041420778]
         });
 
         sock.ev.on('creds.update', saveCreds);
@@ -1029,4 +1030,6 @@ cron.schedule('0 21 * * *', async () => {
     if (globalSock) await broadcastReminder(globalSock, null, 'evening');
 }, { timezone: "Asia/Makassar" });
 
-startBot();
+// TEMPORARY DISABLED — scan QR dulu dari lokal, lalu aktifkan kembali
+// startBot();
+console.log('⏸️  Bot WhatsApp dimatikan sementara untuk proses scan QR lokal.');
