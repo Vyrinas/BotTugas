@@ -819,14 +819,15 @@ async function startBot() {
                     } catch (e) {
                         console.error('Gagal menghapus auth state:', e.message);
                     }
-                    // Restart sekali saja agar QR baru muncul
+                    // Restart sekali saja agar QR baru muncul (delay panjang agar WA tidak rate-limit)
                     if (!bot405Retried) {
                         bot405Retried = true;
+                        await logBotEvent('info', 'Menunggu 15 detik sebelum mencoba koneksi baru...');
                         await updateBotStatus({ status: 'connecting', qr: '' });
                         isReconnecting = false;
-                        setTimeout(() => startBot(), 3000);
+                        setTimeout(() => startBot(), 15000);
                     } else {
-                        await logBotEvent('warn', 'Menunggu scan QR dari admin panel atau tombol Paksa Reconnect.');
+                        await logBotEvent('warn', 'Koneksi ulang gagal. Silakan klik tombol "Paksa Reconnect" di admin panel.');
                         await updateBotStatus({ status: 'disconnected', qr: '' });
                         isReconnecting = false;
                     }
